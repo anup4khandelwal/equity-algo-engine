@@ -1,0 +1,87 @@
+# equity-algo-engine
+
+A **local-first** algorithmic trading system for **Indian equities (NSE/BSE)**
+built on **Zerodha Kite Connect**. It generates intraday and positional signals,
+backtests them with realistic transaction costs, and **paper-trades** them
+against the live market.
+
+> ⚠️ Live order execution is intentionally **out of scope** for now (it requires
+> a registered static IP). The system runs in **paper mode** by default. See
+> [`CLAUDE.md`](./CLAUDE.md) for the full working agreement and hard constraints,
+> and [`CLAUDE_CODE_PROMPT.md`](./CLAUDE_CODE_PROMPT.md) for the complete brief
+> and phased build order.
+
+## Status
+
+**Phase 0 — Scaffolding.** Repo skeleton, environment, and tooling are in place.
+Subsequent phases (broker layer, data layer, strategies/backtester, risk + paper
+execution, live paper-trading loop) follow the build order in the brief.
+
+## Requirements
+
+- Python **3.12**
+- [`uv`](https://docs.astral.sh/uv/) for dependency/environment management
+- Docker + Docker Compose (for TimescaleDB and Redis)
+
+## Setup
+
+```bash
+# 1. Install dependencies (runtime + dev) into a managed virtualenv
+uv sync
+
+# 2. Configure secrets and connection strings
+cp .env.example .env
+#   then edit .env and fill in your Kite Connect API key/secret
+
+# 3. Start the stateful services (TimescaleDB + Redis)
+docker compose up -d
+
+# 4. Wire up the commit hooks (gitleaks + ruff)
+uv run pre-commit install
+```
+
+### Verify the services are healthy
+
+```bash
+docker compose ps        # both services should report (healthy)
+```
+
+## Development
+
+```bash
+uv run ruff check .              # lint
+uv run ruff format --check .     # format check
+uv run pytest -v                 # tests
+```
+
+CI (`.github/workflows/ci.yml`) runs gitleaks secret scanning, ruff, and pytest
+against a real TimescaleDB + Redis on every push/PR to `main`. All Kite/broker
+calls are mocked — **no live API access in CI**.
+
+## Project layout
+
+```
+.
+├── config/                 # pydantic-settings configuration
+├── src/algotrading/
+│   ├── broker/             # Kite wrapper, token refresh, throttle   (Phase 1)
+│   ├── data/               # ingestion, backfill, DB models          (Phase 2)
+│   ├── strategies/         # Strategy base class + implementations   (Phase 3)
+│   ├── backtest/           # event-driven simulator + cost model     (Phase 3)
+│   ├── execution/          # OrderGateway, PaperGateway, LiveGateway  (Phase 4)
+│   ├── risk/               # sizing, stop-loss, kill-switch           (Phase 4)
+│   └── engine.py           # orchestrator (paper/live wiring)
+├── scripts/                # refresh_token.py, backfill.py
+├── migrations/             # alembic versions
+└── tests/
+```
+
+## Safety & compliance
+
+- **Personal use only** — no multi-client, signal-selling, or distribution
+  features.
+- **Secrets never touch git** — `.env`, tokens, sessions, and data dumps are
+  gitignored; gitleaks enforces this on every commit and in CI.
+- **Backtests report net P&L** after brokerage, STT, exchange/SEBI charges, GST,
+  stamp duty, and slippage.
+- **No real orders** — `LiveGateway` stays stubbed until explicitly enabled.

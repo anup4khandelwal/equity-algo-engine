@@ -1,0 +1,41 @@
+# --- Secrets & credentials (NEVER commit) ------------------------------------
+.env
+.env.*
+!.env.example
+*.token
+*.session
+secrets/
+
+# --- Market data dumps -------------------------------------------------------
+data/
+*.csv
+*.parquet
+*.feather
+*.h5
+
+# --- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+
+# --- Tooling caches ----------------------------------------------------------
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- Notebooks (strip outputs; don't commit checkpoints) ---------------------
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# --- OS / editor -------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/

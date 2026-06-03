@@ -1,0 +1,51 @@
+[project]
+name = "algotrading"
+version = "0.1.0"
+description = "Local-first algorithmic trading system for Indian equities (NSE/BSE) via Zerodha Kite Connect"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "kiteconnect>=5.0.1",
+    "sqlalchemy>=2.0.30",
+    "alembic>=1.13.1",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "redis>=5.0.4",
+    "psycopg[binary]>=3.1.19",
+    "pandas>=2.2.2",
+    "numpy>=1.26.4",
+]
+
+[project.optional-dependencies]
+# Technical-analysis indicators (Phase 3 onwards).
+indicators = ["pandas-ta>=0.3.14b0"]
+# Fast parameter-research backtesting (Phase 3 onwards).
+backtest = ["vectorbt>=0.26.2"]
+# Read-only dashboard / API (Phase 6, later).
+api = ["fastapi>=0.111.0", "uvicorn[standard]>=0.29.0"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.4.4",
+    "pytest>=8.2.0",
+    "pre-commit>=3.7.1",
+]
+
+# This is a local-first application, not a distributable library, so uv should
+# manage the environment without trying to build/install the project itself.
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "config", "scripts", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+[tool.pytest.ini_options]
+# `src` makes the `algotrading` package importable; `.` makes `config` importable.
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+addopts = "-ra"
