@@ -7,7 +7,9 @@
 secrets/
 
 # --- Market data dumps -------------------------------------------------------
-data/
+# Anchored to the repo root so it only ignores the top-level dump directory,
+# not source packages named `data` (e.g. src/algotrading/data/).
+/data/
 *.csv
 *.parquet
 *.feather
