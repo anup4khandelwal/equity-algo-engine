@@ -108,6 +108,7 @@ class PaperTradingEngine:
                     reference_price=signal.price if signal.price is not None else bar.close,
                     product=self.config.product,
                     tag=self.strategy.name,
+                    reason=signal.reason or "entry",
                 ),
                 bar,
             )
@@ -121,7 +122,8 @@ class PaperTradingEngine:
                     order_type=OrderType.MARKET,
                     reference_price=signal.price if signal.price is not None else bar.close,
                     product=self.config.product,
-                    tag=signal.reason,
+                    tag=self.strategy.name,
+                    reason=signal.reason or "exit",
                 ),
                 bar,
             )
@@ -136,7 +138,8 @@ class PaperTradingEngine:
                 order_type=OrderType.MARKET,
                 reference_price=bar.close,
                 product=self.config.product,
-                tag=reason,
+                tag=self.strategy.name,
+                reason=reason,
             ),
             bar,
         )

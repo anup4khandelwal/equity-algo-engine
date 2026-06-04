@@ -79,6 +79,7 @@ def trades_view(state: DashboardState) -> list[dict[str, Any]]:
             "fill_price": fill.fill_price,
             "charges": fill.charges,
             "strategy": fill.order.tag,
+            "reason": fill.order.reason,
         }
         for fill in state.fills
     ]

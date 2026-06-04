@@ -93,7 +93,9 @@ def test_square_off_flattens_open_position() -> None:
 
     engine.on_bar(_bar(15, 15, 105.0))  # square-off time
     assert engine.portfolio.open_position_count() == 0
-    assert engine.trade_log.fills[-1].order.tag == "square_off"
+    last = engine.trade_log.fills[-1].order
+    assert last.tag == "scripted"  # attributed to the strategy
+    assert last.reason == "square_off"  # reason preserved separately
 
 
 def test_atr_sizing_used_when_enabled() -> None:

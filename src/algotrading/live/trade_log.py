@@ -40,7 +40,8 @@ class TradeLog:
                     "quantity": fill.quantity,
                     "fill_price": fill.fill_price,
                     "charges": fill.charges,
-                    "tag": fill.order.tag,
+                    "strategy": fill.order.tag,
+                    "reason": fill.order.reason,
                 }
             )
             for fill in self.fills

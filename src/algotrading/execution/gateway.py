@@ -45,6 +45,7 @@ class Order:
     reference_price: float | None = None
     product: Product = Product.INTRADAY
     tag: str = ""
+    reason: str = ""
 
 
 @dataclass(frozen=True)
