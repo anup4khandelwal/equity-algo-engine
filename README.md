@@ -28,20 +28,31 @@ Live order execution remains **stubbed** (`LiveGateway` raises `NotImplementedEr
 ### Backtest a strategy
 
 ```bash
+# Intraday Opening Range Breakout (single instrument)
 uv run python scripts/backtest.py --exchange NSE --symbol INFY \
     --from 2026-01-01 --to 2026-03-31 --or-minutes 15
+
+# Cross-sectional momentum rotation (multi-asset, positional)
+uv run python scripts/rotation_backtest.py --exchange NSE \
+    --symbols INFY,TCS,RELIANCE,HDFCBANK,ITC,SBIN \
+    --from 2025-01-01 --to 2026-03-31 --lookback 90 --top-n 3 --rebalance-every 21
 ```
+
+Strategies: `OpeningRangeBreakout` (intraday), `Momentum` (single-name
+positional), and a cross-sectional momentum **rotation** backtester
+(`backtest.run_rotation`) that ranks a universe and holds the top names.
 
 ### Serve the read-only dashboard
 
-```python
-import uvicorn
-from algotrading.api.app import create_app
-from algotrading.api.service import DashboardState
-
-# state can be built from a running engine via DashboardState.from_engine(engine)
-uvicorn.run(create_app(state))  # GET /positions /pnl /trades /equity /attribution
+```bash
+# Zero-setup demo (synthetic data, no DB/Kite):
+uv run python scripts/dashboard.py --demo
+# Or replay stored bars through the paper engine:
+uv run python scripts/dashboard.py --symbol INFY --from 2026-01-01 --to 2026-03-31
 ```
+
+Endpoints: `GET /positions /pnl /trades /equity /attribution /health`. Build a
+state programmatically with `DashboardState.from_engine(engine)`.
 
 ## Requirements
 
