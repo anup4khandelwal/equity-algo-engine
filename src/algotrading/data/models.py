@@ -34,9 +34,7 @@ class Instrument(Base):
     __tablename__ = "instruments"
 
     # Kite's numeric token; not auto-generated — it comes from the exchange.
-    instrument_token: Mapped[int] = mapped_column(
-        BigInteger, primary_key=True, autoincrement=False
-    )
+    instrument_token: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     exchange_token: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     tradingsymbol: Mapped[str] = mapped_column(String(64), index=True)
     name: Mapped[str | None] = mapped_column(String(256), nullable=True)
@@ -52,9 +50,7 @@ class Instrument(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    __table_args__ = (
-        Index("ix_instruments_exchange_symbol", "exchange", "tradingsymbol"),
-    )
+    __table_args__ = (Index("ix_instruments_exchange_symbol", "exchange", "tradingsymbol"),)
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"<Instrument {self.exchange}:{self.tradingsymbol} ({self.instrument_token})>"

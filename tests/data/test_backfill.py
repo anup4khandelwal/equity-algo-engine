@@ -100,8 +100,6 @@ def test_backfill_bars_chunks_requests_and_stores() -> None:
 def test_backfill_bars_handles_empty_response() -> None:
     client = FakeClient(bars=[])
     repo = FakeOHLCRepo()
-    total = backfill_bars(
-        client, repo, 1, date(2026, 1, 1), date(2026, 1, 1), chunk_days=60
-    )
+    total = backfill_bars(client, repo, 1, date(2026, 1, 1), date(2026, 1, 1), chunk_days=60)
     assert total == 0
     assert client.historical_calls == [(1, date(2026, 1, 1), date(2026, 1, 1), "minute")]

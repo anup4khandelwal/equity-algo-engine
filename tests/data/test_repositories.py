@@ -7,7 +7,7 @@ PostgreSQL-specific.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -65,7 +65,7 @@ def test_ohlc_upsert_and_range_query(db_session) -> None:
     rows = [
         {
             "instrument_token": 408065,
-            "time": datetime(2026, 6, 3, 9, 15 + i, tzinfo=timezone.utc),
+            "time": datetime(2026, 6, 3, 9, 15 + i, tzinfo=UTC),
             "open": 100.0 + i,
             "high": 101.0 + i,
             "low": 99.0 + i,
@@ -79,8 +79,8 @@ def test_ohlc_upsert_and_range_query(db_session) -> None:
 
     result = ohlc.get_range(
         408065,
-        datetime(2026, 6, 3, 9, 15, tzinfo=timezone.utc),
-        datetime(2026, 6, 3, 9, 16, tzinfo=timezone.utc),
+        datetime(2026, 6, 3, 9, 15, tzinfo=UTC),
+        datetime(2026, 6, 3, 9, 16, tzinfo=UTC),
     )
     assert [bar.close for bar in result] == [100.5, 101.5]  # 9:15 and 9:16 only
 
@@ -90,7 +90,7 @@ def test_ohlc_upsert_overwrites_existing_bar(db_session) -> None:
     db_session.flush()
     ohlc = OHLCRepository(db_session)
 
-    t = datetime(2026, 6, 3, 9, 15, tzinfo=timezone.utc)
+    t = datetime(2026, 6, 3, 9, 15, tzinfo=UTC)
     base = {
         "instrument_token": 408065,
         "time": t,

@@ -32,11 +32,10 @@ def _to_optional_float(value: Any) -> float | None:
 
 def parse_instrument(record: dict[str, Any]) -> dict[str, Any]:
     """Map a Kite instrument record to ``Instrument`` column values."""
+    exchange_token = record.get("exchange_token")
     return {
         "instrument_token": int(record["instrument_token"]),
-        "exchange_token": (
-            int(record["exchange_token"]) if record.get("exchange_token") not in (None, "") else None
-        ),
+        "exchange_token": (int(exchange_token) if exchange_token not in (None, "") else None),
         "tradingsymbol": str(record["tradingsymbol"]),
         "name": (str(record["name"]) if record.get("name") else None),
         "exchange": str(record["exchange"]),

@@ -65,9 +65,7 @@ def backfill_bars(
     """
     total = 0
     for window_start, window_end in date_chunks(start, end, chunk_days):
-        bars = client.historical_data(
-            instrument_token, window_start, window_end, interval
-        )
+        bars = client.historical_data(instrument_token, window_start, window_end, interval)
         rows = [parse_bar(instrument_token, bar) for bar in bars]
         total += repo.upsert_bars(rows)
     return total

@@ -31,9 +31,7 @@ class InstrumentRepository:
             for col in Instrument.__table__.columns
             if col.name not in ("instrument_token", "updated_at")
         }
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["instrument_token"], set_=update_cols
-        )
+        stmt = stmt.on_conflict_do_update(index_elements=["instrument_token"], set_=update_cols)
         self.session.execute(stmt)
         return len(records)
 
@@ -71,9 +69,7 @@ class OHLCRepository:
         self.session.execute(stmt)
         return len(rows)
 
-    def get_range(
-        self, instrument_token: int, start: datetime, end: datetime
-    ) -> list[OHLCBar]:
+    def get_range(self, instrument_token: int, start: datetime, end: datetime) -> list[OHLCBar]:
         stmt = (
             select(OHLCBar)
             .where(
