@@ -51,6 +51,9 @@ class PaperTradingEngine:
     def __post_init__(self) -> None:
         self._bars: list[Bar] = []
         self._date = None
+        # Recorded for the dashboard (Phase 6).
+        self.equity_curve: list[tuple] = []
+        self.last_prices: dict[int, float] = {}
 
     def _position(self, token: int) -> Position | None:
         return self.portfolio.positions.get(token)
@@ -78,7 +81,10 @@ class PaperTradingEngine:
         if signal is not None:
             self._handle_signal(signal, bar, position)
 
-        self.risk.update_pnl(self.portfolio.day_pnl({bar.instrument_token: bar.close}))
+        self.last_prices[bar.instrument_token] = bar.close
+        day_pnl = self.portfolio.day_pnl(self.last_prices)
+        self.risk.update_pnl(day_pnl)
+        self.equity_curve.append((bar.time, self.config.capital + day_pnl))
 
     def _handle_signal(self, signal: Signal, bar: Bar, position: Position | None) -> None:
         if signal.type is SignalType.ENTRY and position is None:

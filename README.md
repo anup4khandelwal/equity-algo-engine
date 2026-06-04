@@ -13,9 +13,35 @@ against the live market.
 
 ## Status
 
-**Phase 0 — Scaffolding.** Repo skeleton, environment, and tooling are in place.
-Subsequent phases (broker layer, data layer, strategies/backtester, risk + paper
-execution, live paper-trading loop) follow the build order in the brief.
+All phases from the brief are implemented:
+
+- **Phase 0 — Scaffolding** — repo skeleton, env, tooling.
+- **Phase 1 — Broker layer + auth** — rate-limited Kite client, daily token refresh.
+- **Phase 2 — Data layer** — TimescaleDB hypertable + continuous aggregates, repositories, backfill.
+- **Phase 3 — Strategy framework + backtester** — event-driven simulator, full cost model (net P&L), metrics, Opening Range Breakout.
+- **Phase 4 — Risk + paper execution** — `OrderGateway`/`PaperGateway`/`LiveGateway` (stub), ATR sizing, kill-switch, square-off.
+- **Phase 5 — Live paper-trading loop** — tick→bar aggregation, engine, trade log, notifier.
+- **Phase 6 — Dashboard + second strategy** — read-only FastAPI views and a positional Momentum strategy.
+
+Live order execution remains **stubbed** (`LiveGateway` raises `NotImplementedError`).
+
+### Backtest a strategy
+
+```bash
+uv run python scripts/backtest.py --exchange NSE --symbol INFY \
+    --from 2026-01-01 --to 2026-03-31 --or-minutes 15
+```
+
+### Serve the read-only dashboard
+
+```python
+import uvicorn
+from algotrading.api.app import create_app
+from algotrading.api.service import DashboardState
+
+# state can be built from a running engine via DashboardState.from_engine(engine)
+uvicorn.run(create_app(state))  # GET /positions /pnl /trades /equity /attribution
+```
 
 ## Requirements
 

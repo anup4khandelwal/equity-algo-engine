@@ -1,0 +1,85 @@
+"""Tests for the dashboard service (read-model) layer."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+import pytest
+
+from algotrading.api.service import (
+    DashboardState,
+    equity_curve_view,
+    pnl_summary,
+    positions_view,
+    strategy_attribution,
+    trades_view,
+)
+from algotrading.execution.gateway import Fill, Order, OrderStatus
+from algotrading.execution.portfolio import Portfolio
+from algotrading.strategies.base import Position, Side
+
+NOW = datetime(2026, 6, 3, 9, 30, tzinfo=UTC)
+
+
+def _fill(side: Side, qty: int, price: float, charges: float, tag: str) -> Fill:
+    return Fill(
+        Order(1, side, qty, reference_price=price, tag=tag),
+        OrderStatus.FILLED,
+        price,
+        qty,
+        NOW,
+        charges,
+    )
+
+
+def _state() -> DashboardState:
+    pf = Portfolio(
+        positions={1: Position(Side.BUY, 100, 100.0, NOW)},
+        realized_pnl=250.0,
+        total_charges=30.0,
+    )
+    fills = [
+        _fill(Side.BUY, 100, 100.0, 10.0, "orb"),
+        _fill(Side.SELL, 100, 110.0, 12.0, "orb"),
+        _fill(Side.BUY, 50, 200.0, 8.0, "momentum"),
+    ]
+    return DashboardState(
+        portfolio=pf,
+        fills=fills,
+        equity_curve=[(NOW, 100_250.0)],
+        last_prices={1: 105.0},
+    )
+
+
+def test_positions_view_includes_unrealized() -> None:
+    rows = positions_view(_state())
+    assert rows[0]["instrument_token"] == 1
+    assert rows[0]["unrealized_pnl"] == pytest.approx((105.0 - 100.0) * 100)
+
+
+def test_pnl_summary() -> None:
+    summary = pnl_summary(_state())
+    assert summary["realized_pnl"] == pytest.approx(250.0)
+    assert summary["unrealized_pnl"] == pytest.approx(500.0)
+    assert summary["total_pnl"] == pytest.approx(750.0)
+    assert summary["open_positions"] == 1
+
+
+def test_trades_view_shapes_fills() -> None:
+    rows = trades_view(_state())
+    assert len(rows) == 3
+    assert rows[0]["strategy"] == "orb"
+    assert rows[2]["side"] == "BUY"
+
+
+def test_equity_curve_view() -> None:
+    rows = equity_curve_view(_state())
+    assert rows == [{"time": NOW.isoformat(), "equity": 100_250.0}]
+
+
+def test_strategy_attribution_groups_by_tag() -> None:
+    attr = {row["strategy"]: row for row in strategy_attribution(_state())}
+    assert attr["orb"]["fills"] == 2
+    assert attr["orb"]["quantity"] == 200
+    assert attr["orb"]["charges"] == pytest.approx(22.0)
+    assert attr["momentum"]["fills"] == 1
