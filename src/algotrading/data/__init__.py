@@ -5,12 +5,14 @@ from .calendar import TradingCalendar, load_holidays
 from .corporate_actions import CorporateAction, adjust_bars, bonus_action, split_action
 from .db import get_engine, get_session_factory, session_scope
 from .mappers import parse_bar, parse_instrument
-from .models import Base, Instrument, OHLCBar
-from .repositories import InstrumentRepository, OHLCRepository
+from .models import Base, FillRecord, Instrument, OHLCBar
+from .repositories import FillRepository, InstrumentRepository, OHLCRepository, fill_to_record
 
 __all__ = [
     "Base",
     "CorporateAction",
+    "FillRecord",
+    "FillRepository",
     "Instrument",
     "InstrumentRepository",
     "OHLCBar",
@@ -20,6 +22,7 @@ __all__ = [
     "backfill_bars",
     "bonus_action",
     "date_chunks",
+    "fill_to_record",
     "get_engine",
     "get_session_factory",
     "load_holidays",

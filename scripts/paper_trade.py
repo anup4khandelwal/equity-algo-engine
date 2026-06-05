@@ -24,7 +24,7 @@ sys.path.insert(0, str(_ROOT))
 from config.settings import get_settings  # noqa: E402
 
 from algotrading.data.db import session_scope  # noqa: E402
-from algotrading.data.repositories import InstrumentRepository  # noqa: E402
+from algotrading.data.repositories import FillRepository, InstrumentRepository  # noqa: E402
 from algotrading.engine import EngineConfig, PaperTradingEngine  # noqa: E402
 from algotrading.live.feed import KiteTickerFeed  # noqa: E402
 from algotrading.strategies.orb import OpeningRangeBreakout  # noqa: E402
@@ -71,7 +71,14 @@ def main(argv: list[str] | None = None) -> int:
         on_bar=engine.on_bar,
     )
     print(f"Paper-trading {args.exchange}:{args.symbol} (token {token}). Ctrl-C to stop.")
-    feed.start()
+    try:
+        feed.start()
+    finally:
+        # Persist the session's fills so history survives the restart.
+        if engine.trade_log.fills:
+            with session_scope() as session:
+                saved = FillRepository(session).add_many(engine.trade_log.fills)
+            print(f"Persisted {saved} fills to the database.")
     return 0
 
 

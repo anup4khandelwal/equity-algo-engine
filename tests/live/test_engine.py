@@ -98,6 +98,20 @@ def test_square_off_flattens_open_position() -> None:
     assert last.reason == "square_off"  # reason preserved separately
 
 
+def test_fill_listener_receives_filled_orders() -> None:
+    t1, t2 = datetime(2026, 6, 3, 9, 30), datetime(2026, 6, 3, 10, 0)
+    received = []
+    engine = PaperTradingEngine(
+        ScriptedStrategy({t1: _entry(t1, Side.BUY), t2: _exit(t2, Side.SELL)}),
+        config=EngineConfig(fixed_quantity=10, use_atr_sizing=False),
+        fill_listener=received.append,
+    )
+    engine.on_bar(_bar(9, 30, 100.0))
+    engine.on_bar(_bar(10, 0, 110.0))
+    assert len(received) == 2  # entry + exit fills
+    assert all(f.status.value == "FILLED" for f in received)
+
+
 def test_atr_sizing_used_when_enabled() -> None:
     # Build enough history for ATR, then enter.
     signals = {}

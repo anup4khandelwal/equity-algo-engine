@@ -10,10 +10,18 @@ Ties the feed → strategy → risk → execution chain together. The same
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from algotrading.backtest.costs import Product
-from algotrading.execution.gateway import Order, OrderGateway, OrderStatus, OrderType, PaperGateway
+from algotrading.execution.gateway import (
+    Fill,
+    Order,
+    OrderGateway,
+    OrderStatus,
+    OrderType,
+    PaperGateway,
+)
 from algotrading.execution.portfolio import Portfolio
 from algotrading.live.notifier import LoggingNotifier, Notifier
 from algotrading.live.trade_log import TradeLog
@@ -47,6 +55,9 @@ class PaperTradingEngine:
     notifier: Notifier = field(default_factory=LoggingNotifier)
     trade_log: TradeLog = field(default_factory=TradeLog)
     config: EngineConfig = field(default_factory=EngineConfig)
+    # Optional sink for each filled order (e.g. DB persistence). Kept generic so
+    # the engine stays DB-agnostic and testable.
+    fill_listener: Callable[[Fill], None] | None = None
 
     def __post_init__(self) -> None:
         self._bars: list[Bar] = []
@@ -149,6 +160,8 @@ class PaperTradingEngine:
         if fill.status is OrderStatus.FILLED:
             self.portfolio.apply_fill(fill)
             self.trade_log.record(fill)
+            if self.fill_listener is not None:
+                self.fill_listener(fill)
             self.notifier.notify(
                 f"{fill.order.side} {fill.quantity} {fill.order.instrument_token} "
                 f"@ {fill.fill_price:.2f} [{fill.order.tag}]"

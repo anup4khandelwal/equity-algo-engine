@@ -7,13 +7,16 @@ idempotent (existing rows are refreshed rather than duplicated).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from .models import Instrument, OHLCBar
+from .models import FillRecord, Instrument, OHLCBar
+
+if TYPE_CHECKING:
+    from algotrading.execution.gateway import Fill
 
 
 class InstrumentRepository:
@@ -79,4 +82,55 @@ class OHLCRepository:
             )
             .order_by(OHLCBar.time)
         )
+        return list(self.session.execute(stmt).scalars())
+
+
+def fill_to_record(fill: Fill) -> FillRecord:
+    """Map an execution :class:`Fill` to a persistable ``FillRecord``."""
+    order = fill.order
+    return FillRecord(
+        time=fill.time,
+        instrument_token=order.instrument_token,
+        side=str(order.side.value),
+        quantity=fill.quantity,
+        price=fill.fill_price,
+        charges=fill.charges,
+        strategy=order.tag,
+        reason=order.reason,
+        product=str(order.product.value),
+        status=str(fill.status.value),
+    )
+
+
+class FillRepository:
+    """Append-only persistence + queries for execution fills."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def add(self, fill: Fill) -> FillRecord:
+        record = fill_to_record(fill)
+        self.session.add(record)
+        return record
+
+    def add_many(self, fills: list[Fill]) -> int:
+        records = [fill_to_record(f) for f in fills]
+        self.session.add_all(records)
+        return len(records)
+
+    def list_fills(
+        self,
+        *,
+        since: datetime | None = None,
+        strategy: str | None = None,
+        limit: int | None = None,
+    ) -> list[FillRecord]:
+        stmt = select(FillRecord)
+        if since is not None:
+            stmt = stmt.where(FillRecord.time >= since)
+        if strategy is not None:
+            stmt = stmt.where(FillRecord.strategy == strategy)
+        stmt = stmt.order_by(FillRecord.time, FillRecord.id)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return list(self.session.execute(stmt).scalars())

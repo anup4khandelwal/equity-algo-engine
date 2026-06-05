@@ -76,3 +76,24 @@ class OHLCBar(Base):
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"<OHLCBar {self.instrument_token} @ {self.time} c={self.close}>"
+
+
+class FillRecord(Base):
+    """A persisted execution fill, so paper-trading history survives restarts."""
+
+    __tablename__ = "fills"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    instrument_token: Mapped[int] = mapped_column(BigInteger, index=True)
+    side: Mapped[str] = mapped_column(String(4))
+    quantity: Mapped[int] = mapped_column(Integer)
+    price: Mapped[float] = mapped_column(Float)
+    charges: Mapped[float] = mapped_column(Float, default=0.0)
+    strategy: Mapped[str] = mapped_column(String(64), default="", index=True)
+    reason: Mapped[str] = mapped_column(String(32), default="")
+    product: Mapped[str] = mapped_column(String(16), default="intraday")
+    status: Mapped[str] = mapped_column(String(16), default="FILLED")
+
+    def __repr__(self) -> str:  # pragma: no cover - debug aid
+        return f"<FillRecord {self.side} {self.instrument_token} x{self.quantity} @ {self.price}>"
