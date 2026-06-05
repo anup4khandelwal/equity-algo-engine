@@ -20,7 +20,7 @@ All phases from the brief are implemented:
 - **Phase 2 — Data layer** — TimescaleDB hypertable + continuous aggregates, repositories, backfill.
 - **Phase 3 — Strategy framework + backtester** — event-driven simulator, full cost model (net P&L), metrics, Opening Range Breakout.
 - **Phase 4 — Risk + paper execution** — `OrderGateway`/`PaperGateway`/`LiveGateway` (stub), ATR sizing, kill-switch, square-off.
-- **Phase 5 — Live paper-trading loop** — tick→bar aggregation, engine, trade log, notifier.
+- **Phase 5 — Live paper-trading loop** — tick→bar aggregation, engine, trade log, notifier. `PaperTradingEngine` (one instrument) and `MultiStrategyEngine` (many strategies/instruments sharing one portfolio + risk budget).
 - **Phase 6 — Dashboard + second strategy** — read-only FastAPI views and a positional Momentum strategy.
 
 Live order execution remains **stubbed** (`LiveGateway` raises `NotImplementedError`).

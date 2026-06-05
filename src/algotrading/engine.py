@@ -1,16 +1,20 @@
-"""Paper-trading orchestrator.
+"""Paper-trading orchestrators.
 
-Ties the feed → strategy → risk → execution chain together. The same
-:class:`Strategy` used in backtests drives this engine; signals are gated by the
-:class:`RiskManager`, sized with ATR, executed through an
+The same :class:`Strategy` objects used in backtests drive these engines; signals
+are gated by the :class:`RiskManager`, sized with ATR, executed through an
 :class:`OrderGateway` (PaperGateway by default), and booked in a
 :class:`Portfolio`. Switching to live is a matter of swapping the gateway — and
 ``LiveGateway`` stays stubbed.
+
+- :class:`PaperTradingEngine`: one strategy on one instrument.
+- :class:`MultiStrategyEngine`: many strategies (one per instrument) sharing a
+  single portfolio and risk budget (max-positions and the daily-loss kill-switch
+  apply across all of them).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from algotrading.backtest.costs import Product
@@ -45,118 +49,40 @@ class EngineConfig:
 
 
 @dataclass
-class PaperTradingEngine:
-    """Single-strategy paper-trading engine driven bar by bar."""
+class _OrderRouter:
+    """Shared sizing, risk-gating, and execution used by both engines.
 
-    strategy: Strategy
-    gateway: OrderGateway = field(default_factory=PaperGateway)
-    risk: RiskManager = field(default_factory=RiskManager)
-    portfolio: Portfolio = field(default_factory=Portfolio)
-    notifier: Notifier = field(default_factory=LoggingNotifier)
-    trade_log: TradeLog = field(default_factory=TradeLog)
-    config: EngineConfig = field(default_factory=EngineConfig)
-    # Optional sink for each filled order (e.g. DB persistence). Kept generic so
-    # the engine stays DB-agnostic and testable.
+    Stateless with respect to prices/positions (those live in the shared
+    :class:`Portfolio`), so multiple strategies can route through one instance.
+    """
+
+    gateway: OrderGateway
+    risk: RiskManager
+    portfolio: Portfolio
+    notifier: Notifier
+    trade_log: TradeLog
+    config: EngineConfig
     fill_listener: Callable[[Fill], None] | None = None
 
-    def __post_init__(self) -> None:
-        self._bars: list[Bar] = []
-        self._date = None
-        # Recorded for the dashboard (Phase 6).
-        self.equity_curve: list[tuple] = []
-        self.last_prices: dict[int, float] = {}
-
-    def _position(self, token: int) -> Position | None:
-        return self.portfolio.positions.get(token)
-
-    def on_bar(self, bar: Bar) -> None:
-        """Process one completed bar end-to-end."""
-        if self._date != bar.time.date():
-            self._date = bar.time.date()
-            self.risk.reset_day()
-
-        self._bars.append(bar)
-        if len(self._bars) > self.config.history_size:
-            self._bars = self._bars[-self.config.history_size :]
-
-        now_t = bar.time.time()
-        position = self._position(bar.instrument_token)
-        signal = self.strategy.on_bar(bar, position)
-
-        # Enforce square-off independently of the strategy.
-        if position is not None and self.risk.should_square_off(now_t):
-            if signal is None or signal.type is not SignalType.EXIT:
-                self._flatten(bar, position, reason="square_off")
-                return
-
-        if signal is not None:
-            self._handle_signal(signal, bar, position)
-
-        self.last_prices[bar.instrument_token] = bar.close
-        day_pnl = self.portfolio.day_pnl(self.last_prices)
-        self.risk.update_pnl(day_pnl)
-        self.equity_curve.append((bar.time, self.config.capital + day_pnl))
-
-    def _handle_signal(self, signal: Signal, bar: Bar, position: Position | None) -> None:
-        if signal.type is SignalType.ENTRY and position is None:
-            day_pnl = self.portfolio.day_pnl({bar.instrument_token: bar.close})
-            if not self.risk.can_enter(
-                now=signal.time.time(),
-                open_positions=self.portfolio.open_position_count(),
-                day_pnl=day_pnl,
-            ):
-                self.notifier.notify(f"Entry blocked by risk for {bar.instrument_token}")
-                return
-            qty = self._size(bar, signal)
-            if qty <= 0:
-                return
-            self._execute(
-                Order(
-                    instrument_token=bar.instrument_token,
-                    side=signal.side,
-                    quantity=qty,
-                    order_type=OrderType.MARKET,
-                    reference_price=signal.price if signal.price is not None else bar.close,
-                    product=self.config.product,
-                    tag=self.strategy.name,
-                    reason=signal.reason or "entry",
-                ),
-                bar,
+    def size(self, bars: Sequence[Bar], price: float) -> int:
+        if self.config.fixed_quantity is not None:
+            return self.config.fixed_quantity
+        if self.config.use_atr_sizing:
+            atr = average_true_range(bars, self.config.atr_period)
+            qty = atr_position_size(
+                self.config.capital,
+                self.config.risk_per_trade,
+                atr,
+                atr_stop_multiple=self.config.atr_stop_multiple,
+                price=price,
+                max_notional=self.config.capital,
             )
-        elif signal.type is SignalType.EXIT and position is not None:
-            exit_side = Side.SELL if position.direction is Side.BUY else Side.BUY
-            self._execute(
-                Order(
-                    instrument_token=bar.instrument_token,
-                    side=exit_side,
-                    quantity=position.quantity,
-                    order_type=OrderType.MARKET,
-                    reference_price=signal.price if signal.price is not None else bar.close,
-                    product=self.config.product,
-                    tag=self.strategy.name,
-                    reason=signal.reason or "exit",
-                ),
-                bar,
-            )
+            if qty > 0:
+                return qty
+        return max(1, int(self.config.capital // price))
 
-    def _flatten(self, bar: Bar, position: Position, reason: str) -> None:
-        exit_side = Side.SELL if position.direction is Side.BUY else Side.BUY
-        self._execute(
-            Order(
-                instrument_token=bar.instrument_token,
-                side=exit_side,
-                quantity=position.quantity,
-                order_type=OrderType.MARKET,
-                reference_price=bar.close,
-                product=self.config.product,
-                tag=self.strategy.name,
-                reason=reason,
-            ),
-            bar,
-        )
-
-    def _execute(self, order: Order, bar: Bar) -> None:
-        fill = self.gateway.place_order(order, now=bar.time)
+    def execute(self, order: Order, when) -> None:
+        fill = self.gateway.place_order(order, now=when)
         if fill.status is OrderStatus.FILLED:
             self.portfolio.apply_fill(fill)
             self.trade_log.record(fill)
@@ -169,20 +95,223 @@ class PaperTradingEngine:
         else:
             self.notifier.notify(f"Order {fill.status}: {fill.message}")
 
-    def _size(self, bar: Bar, signal: Signal) -> int:
+    def try_enter(
+        self,
+        *,
+        strategy_name: str,
+        bar: Bar,
+        signal: Signal,
+        bars: Sequence[Bar],
+        day_pnl: float,
+    ) -> None:
+        if not self.risk.can_enter(
+            now=signal.time.time(),
+            open_positions=self.portfolio.open_position_count(),
+            day_pnl=day_pnl,
+        ):
+            self.notifier.notify(f"Entry blocked by risk for {bar.instrument_token}")
+            return
         price = signal.price if signal.price is not None else bar.close
-        if self.config.fixed_quantity is not None:
-            return self.config.fixed_quantity
-        if self.config.use_atr_sizing:
-            atr = average_true_range(self._bars, self.config.atr_period)
-            qty = atr_position_size(
-                self.config.capital,
-                self.config.risk_per_trade,
-                atr,
-                atr_stop_multiple=self.config.atr_stop_multiple,
-                price=price,
-                max_notional=self.config.capital,
+        qty = self.size(bars, price)
+        if qty <= 0:
+            return
+        self.execute(
+            Order(
+                instrument_token=bar.instrument_token,
+                side=signal.side,
+                quantity=qty,
+                order_type=OrderType.MARKET,
+                reference_price=price,
+                product=self.config.product,
+                tag=strategy_name,
+                reason=signal.reason or "entry",
+            ),
+            bar.time,
+        )
+
+    def exit_position(
+        self,
+        *,
+        strategy_name: str,
+        bar: Bar,
+        position: Position,
+        ref_price: float,
+        reason: str,
+    ) -> None:
+        exit_side = Side.SELL if position.direction is Side.BUY else Side.BUY
+        self.execute(
+            Order(
+                instrument_token=bar.instrument_token,
+                side=exit_side,
+                quantity=position.quantity,
+                order_type=OrderType.MARKET,
+                reference_price=ref_price,
+                product=self.config.product,
+                tag=strategy_name,
+                reason=reason,
+            ),
+            bar.time,
+        )
+
+
+def _process_bar(
+    *,
+    router: _OrderRouter,
+    strategy: Strategy,
+    bar: Bar,
+    bars: list[Bar],
+    last_prices: dict[int, float],
+) -> None:
+    """Route one bar for one strategy through risk → execution (shared logic)."""
+    position = router.portfolio.positions.get(bar.instrument_token)
+    signal = strategy.on_bar(bar, position)
+
+    if position is not None and router.risk.should_square_off(bar.time.time()):
+        if signal is None or signal.type is not SignalType.EXIT:
+            router.exit_position(
+                strategy_name=strategy.name,
+                bar=bar,
+                position=position,
+                ref_price=bar.close,
+                reason="square_off",
             )
-            if qty > 0:
-                return qty
-        return max(1, int(self.config.capital // price))
+            return
+
+    if signal is None:
+        return
+    if signal.type is SignalType.ENTRY and position is None:
+        router.try_enter(
+            strategy_name=strategy.name,
+            bar=bar,
+            signal=signal,
+            bars=bars,
+            day_pnl=router.portfolio.day_pnl(last_prices),
+        )
+    elif signal.type is SignalType.EXIT and position is not None:
+        router.exit_position(
+            strategy_name=strategy.name,
+            bar=bar,
+            position=position,
+            ref_price=signal.price if signal.price is not None else bar.close,
+            reason=signal.reason or "exit",
+        )
+
+
+@dataclass
+class PaperTradingEngine:
+    """Single-strategy paper-trading engine driven bar by bar."""
+
+    strategy: Strategy
+    gateway: OrderGateway = field(default_factory=PaperGateway)
+    risk: RiskManager = field(default_factory=RiskManager)
+    portfolio: Portfolio = field(default_factory=Portfolio)
+    notifier: Notifier = field(default_factory=LoggingNotifier)
+    trade_log: TradeLog = field(default_factory=TradeLog)
+    config: EngineConfig = field(default_factory=EngineConfig)
+    fill_listener: Callable[[Fill], None] | None = None
+
+    def __post_init__(self) -> None:
+        self._router = _OrderRouter(
+            self.gateway,
+            self.risk,
+            self.portfolio,
+            self.notifier,
+            self.trade_log,
+            self.config,
+            self.fill_listener,
+        )
+        self._bars: list[Bar] = []
+        self._date = None
+        self.equity_curve: list[tuple] = []
+        self.last_prices: dict[int, float] = {}
+
+    def on_bar(self, bar: Bar) -> None:
+        """Process one completed bar end-to-end."""
+        if self._date != bar.time.date():
+            self._date = bar.time.date()
+            self.risk.reset_day()
+
+        self._bars.append(bar)
+        if len(self._bars) > self.config.history_size:
+            self._bars = self._bars[-self.config.history_size :]
+        self.last_prices[bar.instrument_token] = bar.close
+
+        _process_bar(
+            router=self._router,
+            strategy=self.strategy,
+            bar=bar,
+            bars=self._bars,
+            last_prices=self.last_prices,
+        )
+
+        day_pnl = self.portfolio.day_pnl(self.last_prices)
+        self.risk.update_pnl(day_pnl)
+        self.equity_curve.append((bar.time, self.config.capital + day_pnl))
+
+
+@dataclass
+class MultiStrategyEngine:
+    """Runs several strategies (one per instrument) sharing one portfolio and
+    risk budget. Max-open-positions and the daily-loss kill-switch span every
+    strategy, so the book can't exceed the configured limits in aggregate."""
+
+    gateway: OrderGateway = field(default_factory=PaperGateway)
+    risk: RiskManager = field(default_factory=RiskManager)
+    portfolio: Portfolio = field(default_factory=Portfolio)
+    notifier: Notifier = field(default_factory=LoggingNotifier)
+    trade_log: TradeLog = field(default_factory=TradeLog)
+    config: EngineConfig = field(default_factory=EngineConfig)
+    fill_listener: Callable[[Fill], None] | None = None
+
+    def __post_init__(self) -> None:
+        self._router = _OrderRouter(
+            self.gateway,
+            self.risk,
+            self.portfolio,
+            self.notifier,
+            self.trade_log,
+            self.config,
+            self.fill_listener,
+        )
+        self._strategies: dict[int, Strategy] = {}
+        self._history: dict[int, list[Bar]] = {}
+        self._date = None
+        self.equity_curve: list[tuple] = []
+        self.last_prices: dict[int, float] = {}
+
+    def add_strategy(self, strategy: Strategy, instrument_token: int | None = None) -> None:
+        """Register a strategy for an instrument (one strategy per instrument)."""
+        token = instrument_token
+        if token is None:
+            token = getattr(strategy, "instrument_token", None)
+        if token is None:
+            raise ValueError("instrument_token is required (strategy has no .instrument_token)")
+        if token in self._strategies:
+            raise ValueError(f"a strategy is already registered for instrument {token}")
+        self._strategies[token] = strategy
+        self._history[token] = []
+
+    def on_bar(self, bar: Bar) -> None:
+        """Route a bar to the strategy registered for its instrument."""
+        if self._date != bar.time.date():
+            self._date = bar.time.date()
+            self.risk.reset_day()
+
+        self.last_prices[bar.instrument_token] = bar.close
+        strategy = self._strategies.get(bar.instrument_token)
+        if strategy is not None:
+            history = self._history[bar.instrument_token]
+            history.append(bar)
+            if len(history) > self.config.history_size:
+                del history[: -self.config.history_size]
+            _process_bar(
+                router=self._router,
+                strategy=strategy,
+                bar=bar,
+                bars=history,
+                last_prices=self.last_prices,
+            )
+
+        day_pnl = self.portfolio.day_pnl(self.last_prices)
+        self.risk.update_pnl(day_pnl)
+        self.equity_curve.append((bar.time, self.config.capital + day_pnl))
