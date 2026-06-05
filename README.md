@@ -38,9 +38,11 @@ uv run python scripts/rotation_backtest.py --exchange NSE \
     --from 2025-01-01 --to 2026-03-31 --lookback 90 --top-n 3 --rebalance-every 21
 ```
 
-Strategies: `OpeningRangeBreakout` (intraday), `Momentum` (single-name
-positional), and a cross-sectional momentum **rotation** backtester
-(`backtest.run_rotation`) that ranks a universe and holds the top names.
+Strategies: `OpeningRangeBreakout` and `VWAPReversion` (intraday); `Momentum`,
+`MovingAverageCrossover`, `RSI2`, and `Supertrend` (positional/trend); plus a
+cross-sectional momentum **rotation** backtester (`backtest.run_rotation`) that
+ranks a universe and holds the top names. Optimise parameters out-of-sample with
+`backtest.walk_forward` (`scripts/optimize.py`).
 
 ### Serve the read-only dashboard
 
