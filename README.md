@@ -56,6 +56,18 @@ uv run python scripts/dashboard.py --symbol INFY --from 2026-01-01 --to 2026-03-
 Endpoints: `GET /positions /pnl /trades /equity /attribution /health`. Build a
 state programmatically with `DashboardState.from_engine(engine)`.
 
+### Web UI (Next.js)
+
+A proper dashboard UI lives in [`frontend/`](./frontend) — cards, an equity
+chart, and live-polling tables over the API above.
+
+```bash
+# 1. backend
+uv run python scripts/dashboard.py --demo        # API on :8000
+# 2. frontend
+cd frontend && npm install && npm run dev         # UI on http://localhost:3000
+```
+
 ## Requirements
 
 - Python **3.12**
