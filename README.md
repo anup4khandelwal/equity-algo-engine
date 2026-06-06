@@ -13,9 +13,48 @@ against the live market.
 
 ## Status
 
-**Phase 0 — Scaffolding.** Repo skeleton, environment, and tooling are in place.
-Subsequent phases (broker layer, data layer, strategies/backtester, risk + paper
-execution, live paper-trading loop) follow the build order in the brief.
+All phases from the brief are implemented:
+
+- **Phase 0 — Scaffolding** — repo skeleton, env, tooling.
+- **Phase 1 — Broker layer + auth** — rate-limited Kite client, daily token refresh.
+- **Phase 2 — Data layer** — TimescaleDB hypertable + continuous aggregates, repositories, backfill.
+- **Phase 3 — Strategy framework + backtester** — event-driven simulator, full cost model (net P&L), metrics, Opening Range Breakout.
+- **Phase 4 — Risk + paper execution** — `OrderGateway`/`PaperGateway`/`LiveGateway` (stub), ATR sizing, kill-switch, square-off.
+- **Phase 5 — Live paper-trading loop** — tick→bar aggregation, engine, trade log, notifier. `PaperTradingEngine` (one instrument) and `MultiStrategyEngine` (many strategies/instruments sharing one portfolio + risk budget).
+- **Phase 6 — Dashboard + second strategy** — read-only FastAPI views and a positional Momentum strategy.
+
+Live order execution remains **stubbed** (`LiveGateway` raises `NotImplementedError`).
+
+### Backtest a strategy
+
+```bash
+# Intraday Opening Range Breakout (single instrument)
+uv run python scripts/backtest.py --exchange NSE --symbol INFY \
+    --from 2026-01-01 --to 2026-03-31 --or-minutes 15
+
+# Cross-sectional momentum rotation (multi-asset, positional)
+uv run python scripts/rotation_backtest.py --exchange NSE \
+    --symbols INFY,TCS,RELIANCE,HDFCBANK,ITC,SBIN \
+    --from 2025-01-01 --to 2026-03-31 --lookback 90 --top-n 3 --rebalance-every 21
+```
+
+Strategies: `OpeningRangeBreakout` and `VWAPReversion` (intraday); `Momentum`,
+`MovingAverageCrossover`, `RSI2`, and `Supertrend` (positional/trend); plus a
+cross-sectional momentum **rotation** backtester (`backtest.run_rotation`) that
+ranks a universe and holds the top names. Optimise parameters out-of-sample with
+`backtest.walk_forward` (`scripts/optimize.py`).
+
+### Serve the read-only dashboard
+
+```bash
+# Zero-setup demo (synthetic data, no DB/Kite):
+uv run python scripts/dashboard.py --demo
+# Or replay stored bars through the paper engine:
+uv run python scripts/dashboard.py --symbol INFY --from 2026-01-01 --to 2026-03-31
+```
+
+Endpoints: `GET /positions /pnl /trades /equity /attribution /health`. Build a
+state programmatically with `DashboardState.from_engine(engine)`.
 
 ## Requirements
 

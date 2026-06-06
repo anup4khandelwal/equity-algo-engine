@@ -8,6 +8,14 @@ from .metrics import (
     sharpe_ratio,
     sortino_ratio,
 )
+from .optimize import (
+    Fold,
+    WalkForwardResult,
+    expand_grid,
+    grid_search,
+    walk_forward,
+)
+from .rotation import RotationConfig, build_panel, run_rotation
 from .simulator import BacktestConfig, BacktestResult, Trade, run
 
 __all__ = [
@@ -15,13 +23,21 @@ __all__ = [
     "BacktestResult",
     "Charges",
     "CostConfig",
+    "Fold",
     "Metrics",
     "Product",
+    "RotationConfig",
     "Trade",
+    "WalkForwardResult",
+    "build_panel",
     "charges_for_fill",
     "compute_metrics",
+    "expand_grid",
+    "grid_search",
     "max_drawdown",
     "run",
+    "run_rotation",
     "sharpe_ratio",
     "sortino_ratio",
+    "walk_forward",
 ]
