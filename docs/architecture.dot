@@ -1,0 +1,130 @@
+digraph equity_algo_engine {
+  rankdir=TB;
+  fontname="Helvetica";
+  labelloc="t";
+  label="equity-algo-engine — system architecture (local-first, paper-only)";
+  node [fontname="Helvetica", fontsize=10, shape=box, style="rounded,filled", fillcolor="#eef2f7", color="#9aa7b8"];
+  edge [fontname="Helvetica", fontsize=9, color="#6b7686"];
+
+  /* ---------- External ---------- */
+  subgraph cluster_ext {
+    label="External (Zerodha Kite Connect — paid market data)";
+    style="rounded,dashed"; color="#b0392f"; fontcolor="#b0392f";
+    kite_rest [label="Kite Connect REST\n(historical, account)", fillcolor="#fde2df"];
+    kite_ws   [label="KiteTicker\nWebSocket (live ticks)", fillcolor="#fde2df"];
+  }
+  browser [label="Browser\n(you)", shape=box3d, fillcolor="#e8eefc"];
+
+  /* ---------- Frontend ---------- */
+  subgraph cluster_fe {
+    label="Frontend (Node / Next.js)";
+    style="rounded,filled"; color="#2b6cb0"; fillcolor="#f3f7fd";
+    nextjs [label="Next.js dashboard\nfrontend/  (cards, equity chart,\ntables · SWR polling)", fillcolor="#dbe8fb"];
+  }
+
+  /* ---------- API ---------- */
+  subgraph cluster_api {
+    label="Read-only API (FastAPI)";
+    style="rounded,filled"; color="#2b6cb0"; fillcolor="#f4f8ff";
+    fastapi [label="FastAPI app\napi/app.py  (CORS, GET only)"];
+    service [label="DashboardState + read-models\napi/service.py"];
+  }
+
+  /* ---------- Live engine ---------- */
+  subgraph cluster_engine {
+    label="Orchestration (engine.py + live/)";
+    style="rounded,filled"; color="#2f855a"; fillcolor="#f1faf4";
+    feed       [label="KiteTickerFeed\nlive/feed.py"];
+    barbuilder [label="BarBuilder\nlive/bars.py  (ticks → 1-min bars)"];
+    engine     [label="PaperTradingEngine /\nMultiStrategyEngine", fillcolor="#cdeed9"];
+    tradelog   [label="TradeLog"];
+    notifier   [label="Notifier\n(log / Telegram)"];
+  }
+
+  /* ---------- Decisioning ---------- */
+  subgraph cluster_core {
+    label="Strategies & Risk";
+    style="rounded,filled"; color="#6b46c1"; fillcolor="#f7f5fe";
+    strategies [label="Strategy ABC + ORB, Momentum,\nMA-cross, RSI2, VWAP, Supertrend,\ncross-sectional", fillcolor="#e7e0fb"];
+    risk       [label="RiskManager + ATR sizing\nrisk/  (kill-switch, square-off,\nmax positions)"];
+  }
+
+  /* ---------- Execution ---------- */
+  subgraph cluster_exec {
+    label="Execution (execution/)";
+    style="rounded,filled"; color="#b7791f"; fillcolor="#fffaf0";
+    gateway   [label="OrderGateway (interface)"];
+    paper     [label="PaperGateway\nsimulated fills + costs", fillcolor="#d9f2e3"];
+    live      [label="LiveGateway\nNotImplementedError (disabled)", style="rounded,filled,dashed", fillcolor="#fde2df", color="#b0392f", fontcolor="#b0392f"];
+    portfolio [label="Portfolio\npositions + net realised P&L"];
+  }
+
+  /* ---------- Research ---------- */
+  subgraph cluster_research {
+    label="Backtesting & research (backtest/)";
+    style="rounded,filled"; color="#2c7a7b"; fillcolor="#f0fbfb";
+    simulator [label="Event-driven simulator", fillcolor="#cdeeee"];
+    costs     [label="Cost model\nbrokerage·STT·exch·SEBI·GST·stamp"];
+    metrics   [label="Metrics\nnet P&L·Sharpe·Sortino·DD·turnover"];
+    rotation  [label="Rotation backtester\n(cross-sectional)"];
+    optimize  [label="Walk-forward optimizer"];
+  }
+
+  /* ---------- Data access ---------- */
+  subgraph cluster_data {
+    label="Broker & data layer";
+    style="rounded,filled"; color="#4a5568"; fillcolor="#f5f6f8";
+    broker  [label="KiteClient\nbroker/  (token-bucket throttle,\nTokenStore, auth)"];
+    repos   [label="Repositories\ninstruments · ohlc · fills"];
+    dataops [label="backfill · calendar ·\ncorporate-action adjust"];
+  }
+
+  /* ---------- Stores ---------- */
+  subgraph cluster_stores {
+    label="State (docker-compose)";
+    style="rounded,filled"; color="#4a5568"; fillcolor="#eef0f3";
+    tsdb  [label="TimescaleDB\ninstruments · ohlc_bars (hypertable)\n5/15/60-min aggregates · fills", shape=cylinder, fillcolor="#dfe4ea"];
+    redis [label="Redis\ncache / throttle", shape=cylinder, fillcolor="#dfe4ea"];
+  }
+
+  config [label="Settings (pydantic-settings)\nconfig/  ← .env (gitignored)", fillcolor="#fff7e6", color="#b7791f"];
+  cli    [label="CLIs (scripts/): refresh_token · backfill ·\nbacktest · rotation · optimize · paper_trade · dashboard", shape=note, fillcolor="#fffef2", color="#b7791f"];
+
+  /* ---------- Edges: config & secrets ---------- */
+  config -> broker [label="api key/secret,\naccess token"];
+  config -> repos  [style=dotted, label="DATABASE_URL"];
+
+  /* ---------- Edges: data ingestion ---------- */
+  cli -> dataops [style=dashed, label="run"];
+  dataops -> broker -> kite_rest [label="REST (throttled)"];
+  dataops -> repos -> tsdb [label="upsert bars/instruments"];
+  broker -> redis [style=dotted, label="throttle buckets"];
+
+  /* ---------- Edges: live paper loop ---------- */
+  kite_ws -> feed [label="ticks"];
+  feed -> barbuilder -> engine [label="bars"];
+  engine -> strategies [label="on_bar → Signal"];
+  engine -> risk [label="gate + size"];
+  engine -> gateway;
+  gateway -> paper [label="market mode"];
+  gateway -> live [style=dashed, color="#b0392f", label="live mode (off)"];
+  paper -> portfolio [label="fills (net of costs)"];
+  engine -> portfolio;
+  engine -> tradelog;
+  engine -> notifier;
+  engine -> repos [label="persist fills", style=dotted];
+  cli -> engine [style=dashed, label="paper_trade"];
+
+  /* ---------- Edges: research ---------- */
+  tsdb -> simulator [label="bars"];
+  simulator -> strategies [label="on_bar"];
+  simulator -> costs -> metrics;
+  optimize -> simulator [label="grid / walk-forward"];
+  rotation -> costs [style=dotted];
+  cli -> simulator [style=dashed, label="backtest"];
+
+  /* ---------- Edges: dashboard ---------- */
+  engine -> service [label="DashboardState.from_engine"];
+  service -> fastapi -> nextjs -> browser [label="JSON  /  HTTP"];
+  cli -> fastapi [style=dashed, label="dashboard"];
+}

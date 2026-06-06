@@ -11,6 +11,14 @@ against the live market.
 > and [`CLAUDE_CODE_PROMPT.md`](./CLAUDE_CODE_PROMPT.md) for the complete brief
 > and phased build order.
 
+## Architecture
+
+See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full system diagram
+(Mermaid + a rendered [`docs/architecture.png`](./docs/architecture.png)), the
+live and backtest data flows, and layer responsibilities.
+
+![Architecture](./docs/architecture.png)
+
 ## Status
 
 All phases from the brief are implemented:
