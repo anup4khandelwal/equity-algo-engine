@@ -162,6 +162,113 @@ flowchart LR
   ROT["Rotation backtester<br/>cross-sectional momentum"] --> MET
 ```
 
+## Deployment view
+
+Local-first: stateful services run in `docker-compose`; the Python engine and the
+Next.js UI run on the host. (Rendered: [`docs/deployment.png`](./deployment.png).)
+
+```mermaid
+flowchart TB
+  subgraph NET["Internet"]
+    KITE["Zerodha Kite Connect<br/>REST + WebSocket"]
+  end
+
+  subgraph HOST["Host machine — no cloud deploy"]
+    ENVF[".env + secrets/kite_token.json<br/>(gitignored)"]
+
+    subgraph PY["Python (uv venv)"]
+      LIVE["Live paper engine<br/>scripts/paper_trade.py<br/>KiteTicker → PaperGateway"]
+      DASH["FastAPI dashboard :8000<br/>scripts/dashboard.py"]
+      CLIS["CLIs: backfill · backtest<br/>rotation · optimize · refresh_token"]
+    end
+
+    subgraph NODE["Node"]
+      NEXT["Next.js dashboard :3000<br/>frontend/"]
+    end
+
+    subgraph DOCK["docker-compose (stateful services)"]
+      TSDB[("TimescaleDB :5432<br/>volume timescale_data")]
+      REDIS[("Redis :6379<br/>volume redis_data")]
+    end
+
+    BROWSER["Browser"]
+  end
+
+  KITE -->|WS ticks / REST| LIVE
+  KITE -->|REST| CLIS
+  ENVF -. secrets .-> LIVE
+  ENVF -. secrets .-> CLIS
+  ENVF -. secrets .-> DASH
+  CLIS -->|backfill| TSDB
+  LIVE -->|persist fills| TSDB
+  LIVE -. throttle/cache .-> REDIS
+  DASH -->|read bars| TSDB
+  BROWSER -->|HTTP :3000| NEXT -->|JSON :8000 CORS| DASH
+
+  classDef store fill:#dfe4ea,stroke:#4a5568;
+  class TSDB,REDIS store;
+```
+
+## Database schema (TimescaleDB)
+
+`ohlc_bars` is the canonical 1-minute hypertable; 5/15/60-min views are derived
+continuous aggregates. `fills` is an append-only paper-trade log.
+(Rendered: [`docs/schema.png`](./schema.png).)
+
+```mermaid
+erDiagram
+  instruments ||--o{ ohlc_bars : "FK instrument_token (ON DELETE CASCADE)"
+  ohlc_bars ||..o{ ohlc_aggregates : "continuous aggregate (5/15/60-min)"
+  instruments ||..o{ fills : "logical ref (not an enforced FK)"
+
+  instruments {
+    bigint instrument_token PK
+    bigint exchange_token
+    varchar tradingsymbol "idx; idx(exchange,tradingsymbol)"
+    varchar name
+    varchar exchange
+    varchar segment
+    varchar instrument_type
+    int lot_size
+    float tick_size
+    date expiry
+    float strike
+    float last_price
+    timestamptz updated_at
+  }
+
+  ohlc_bars {
+    bigint instrument_token PK_FK
+    timestamptz time PK "partition key (hypertable)"
+    float open
+    float high
+    float low
+    float close
+    bigint volume
+  }
+
+  ohlc_aggregates {
+    bigint instrument_token "first/max/min/last/sum"
+    timestamptz bucket "time_bucket(5m/15m/60m)"
+    float open_high_low_close
+    bigint volume
+  }
+
+  fills {
+    bigserial id PK
+    timestamptz time "idx"
+    bigint instrument_token "idx"
+    varchar side
+    int quantity
+    float price
+    float charges
+    varchar strategy "idx"
+    varchar reason
+    varchar product
+    varchar status
+  }
+```
+
 ## Layer responsibilities
 
 | Layer | Package | Responsibility |

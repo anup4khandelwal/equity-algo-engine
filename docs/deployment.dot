@@ -1,0 +1,62 @@
+digraph deployment {
+  rankdir=TB;
+  labelloc="t";
+  fontname="Helvetica";
+  label="equity-algo-engine — deployment view (local-first)";
+  node [fontname="Helvetica", fontsize=10, shape=box, style="rounded,filled", fillcolor="#eef2f7", color="#9aa7b8"];
+  edge [fontname="Helvetica", fontsize=9, color="#6b7686"];
+
+  subgraph cluster_net {
+    label="Internet"; style="rounded,dashed"; color="#b0392f"; fontcolor="#b0392f";
+    kite [label="Zerodha Kite Connect\nREST (historical/account) + WebSocket (ticks)", fillcolor="#fde2df"];
+  }
+
+  subgraph cluster_host {
+    label="Host machine  (no cloud deploy; engine runs on host)";
+    style="rounded,filled"; color="#4a5568"; fillcolor="#f6f7f9";
+
+    secrets [label=".env  +  secrets/kite_token.json\n(gitignored)", shape=note, fillcolor="#fff7e6", color="#b7791f"];
+
+    subgraph cluster_py {
+      label="Python  (uv-managed venv)";
+      style="rounded,filled"; color="#2f855a"; fillcolor="#f1faf4";
+      live [label="Live paper engine\nscripts/paper_trade.py\n(KiteTicker → PaperGateway)", fillcolor="#cdeed9"];
+      dash [label="FastAPI dashboard  :8000\nscripts/dashboard.py\n(serves DashboardState)", fillcolor="#dbe8fb"];
+      clis [label="CLIs: backfill · backtest ·\nrotation · optimize · refresh_token", shape=note, fillcolor="#fffef2", color="#b7791f"];
+    }
+
+    subgraph cluster_node {
+      label="Node";
+      style="rounded,filled"; color="#2b6cb0"; fillcolor="#f3f7fd";
+      next [label="Next.js dashboard  :3000\nfrontend/", fillcolor="#dbe8fb"];
+    }
+
+    subgraph cluster_docker {
+      label="docker-compose  (stateful services)";
+      style="rounded,filled"; color="#2c7a7b"; fillcolor="#f0fbfb";
+      tsdb  [label="TimescaleDB  :5432\nvolume timescale_data", shape=cylinder, fillcolor="#dfe4ea"];
+      redis [label="Redis  :6379\nvolume redis_data", shape=cylinder, fillcolor="#dfe4ea"];
+    }
+
+    browser [label="Browser", shape=box3d, fillcolor="#e8eefc"];
+  }
+
+  /* network */
+  kite -> live   [label="WS ticks / REST"];
+  kite -> clis   [label="REST (backfill, token)"];
+
+  /* secrets */
+  secrets -> live [style=dotted];
+  secrets -> clis [style=dotted];
+  secrets -> dash [style=dotted];
+
+  /* persistence */
+  clis -> tsdb [label="backfill bars/instruments"];
+  live -> tsdb [label="persist fills"];
+  live -> redis [style=dotted, label="throttle/cache"];
+  dash -> tsdb [label="read bars (replay)"];
+
+  /* dashboard request path */
+  browser -> next [label="HTTP :3000"];
+  next -> dash [label="JSON :8000 (CORS)"];
+}
