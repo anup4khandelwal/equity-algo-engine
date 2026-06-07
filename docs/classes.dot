@@ -1,0 +1,60 @@
+digraph classes {
+  rankdir=BT;
+  labelloc="t";
+  fontname="Helvetica";
+  label="equity-algo-engine — Strategy & OrderGateway class diagram";
+  node [shape=record, fontname="Helvetica", fontsize=10, style=filled, fillcolor="#eef2f7", color="#9aa7b8"];
+  edge [fontname="Helvetica", fontsize=9, color="#6b7686"];
+
+  /* ---------------- Strategy hierarchy ---------------- */
+  Strategy [fillcolor="#e7e0fb", label="{«abstract» Strategy|+ name : str\l|+ generate_signal(bar) : Signal?   «abstract»\l+ risk_check(signal, pos) : Signal?\l+ on_bar(bar, pos=None) : Signal?\l+ reset()\l}"];
+
+  ORB      [label="{OpeningRangeBreakout|opening_range_minutes, target_multiple,\lsession_start, square_off\l}"];
+  Momentum [label="{Momentum|lookback, entry_threshold, exit_threshold\l}"];
+  MAX      [label="{MovingAverageCrossover|fast, slow\l}"];
+  RSI2     [label="{RSI2|period, lower, upper, trend_filter\l}"];
+  VWAP     [label="{VWAPReversion|band, allow_short\l}"];
+  ST       [label="{Supertrend|period, multiplier\l}"];
+
+  ORB -> Strategy [arrowhead=onormal];
+  Momentum -> Strategy [arrowhead=onormal];
+  MAX -> Strategy [arrowhead=onormal];
+  RSI2 -> Strategy [arrowhead=onormal];
+  VWAP -> Strategy [arrowhead=onormal];
+  ST -> Strategy [arrowhead=onormal];
+
+  XS [shape=note, fillcolor="#f7f5fe", color="#6b46c1",
+      label="cross_sectional (module, not a Strategy)\lmomentum_scores() · select_top()\l→ used by the rotation backtester\l"];
+
+  /* ---------------- Execution hierarchy ---------------- */
+  OrderGateway [fillcolor="#fffaf0", label="{«abstract» OrderGateway|+ place_order(order, now=None) : Fill   «abstract»\l}"];
+  PaperGateway [fillcolor="#d9f2e3", label="{PaperGateway|slippage_bps, cost_config\l|+ place_order() : Fill  (simulated + costs)\l}"];
+  LiveGateway  [fillcolor="#fde2df", color="#b0392f", fontcolor="#b0392f",
+      label="{LiveGateway  (disabled)|+ place_order() : raises NotImplementedError\l}"];
+  PaperGateway -> OrderGateway [arrowhead=onormal];
+  LiveGateway -> OrderGateway [arrowhead=onormal];
+
+  /* ---------------- Domain value types ---------------- */
+  Bar      [fillcolor="#f5f6f8", label="{«dataclass» Bar|instrument_token, time,\lopen, high, low, close, volume\l}"];
+  Signal   [fillcolor="#f5f6f8", label="{«dataclass» Signal|time, instrument_token, type (ENTRY/EXIT),\lside (BUY/SELL), price?, reason\l}"];
+  Position [fillcolor="#f5f6f8", label="{«dataclass» Position|direction, quantity, entry_price, entry_time\l+ sign : int\l}"];
+  Order    [fillcolor="#f5f6f8", label="{«dataclass» Order|instrument_token, side, quantity, order_type,\lreference_price?, product, tag, reason\l}"];
+  Fill     [fillcolor="#f5f6f8", label="{«dataclass» Fill|order, status, fill_price,\lquantity, time, charges\l}"];
+
+  /* ---------------- Engine + collaborators ---------------- */
+  Engine    [fillcolor="#cdeed9", label="{PaperTradingEngine / MultiStrategyEngine|orchestrates bar → signal → order\lvia _OrderRouter\l}"];
+  Portfolio [fillcolor="#eef0f3", label="{Portfolio|positions, realized_pnl, total_charges\l+ apply_fill(fill)\l+ day_pnl(prices)\l}"];
+  Risk      [fillcolor="#eef0f3", label="{RiskManager|+ can_enter(...)  + should_square_off(t)\l+ update_pnl(pnl)  (latching kill-switch)\l}"];
+
+  /* dependencies (dashed) */
+  Strategy -> Bar [style=dashed, arrowhead=vee, label="consumes"];
+  Strategy -> Signal [style=dashed, arrowhead=vee, label="emits"];
+  Strategy -> Position [style=dashed, arrowhead=vee, label="risk_check"];
+  OrderGateway -> Order [style=dashed, arrowhead=vee, label="takes"];
+  OrderGateway -> Fill [style=dashed, arrowhead=vee, label="returns"];
+  Engine -> Strategy [style=dashed, arrowhead=vee, label="on_bar"];
+  Engine -> OrderGateway [style=dashed, arrowhead=vee, label="place_order"];
+  Engine -> Risk [style=dashed, arrowhead=vee];
+  Engine -> Portfolio [style=dashed, arrowhead=vee];
+  Portfolio -> Fill [style=dashed, arrowhead=vee, label="apply"];
+}

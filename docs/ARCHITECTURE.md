@@ -269,6 +269,55 @@ erDiagram
   }
 ```
 
+## Class diagram — Strategy & OrderGateway
+
+The two extension points: every strategy implements one `generate_signal`, and
+the paper/live switch is a single `OrderGateway` subtype.
+(Rendered: [`docs/classes.png`](./classes.png).)
+
+```mermaid
+classDiagram
+  class Strategy {
+    <<abstract>>
+    +str name
+    +generate_signal(bar) Signal*
+    +risk_check(signal, position) Signal
+    +on_bar(bar, position) Signal
+    +reset()
+  }
+  Strategy <|-- OpeningRangeBreakout
+  Strategy <|-- Momentum
+  Strategy <|-- MovingAverageCrossover
+  Strategy <|-- RSI2
+  Strategy <|-- VWAPReversion
+  Strategy <|-- Supertrend
+
+  class OrderGateway {
+    <<abstract>>
+    +place_order(order, now) Fill*
+  }
+  class PaperGateway {
+    +slippage_bps
+    +cost_config
+    +place_order() Fill
+  }
+  class LiveGateway {
+    +place_order() raises NotImplementedError
+  }
+  OrderGateway <|-- PaperGateway
+  OrderGateway <|-- LiveGateway
+  note for LiveGateway "Disabled — no real orders"
+
+  Strategy ..> Bar : consumes
+  Strategy ..> Signal : emits
+  OrderGateway ..> Order : takes
+  OrderGateway ..> Fill : returns
+```
+
+> `cross_sectional` (momentum_scores / select_top) is a **module of functions**,
+> not a `Strategy` — the rotation backtester ranks a universe with it rather than
+> emitting per-bar signals.
+
 ## Layer responsibilities
 
 | Layer | Package | Responsibility |
