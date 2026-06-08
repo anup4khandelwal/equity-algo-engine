@@ -24,6 +24,11 @@ backtest = ["vectorbt>=0.26.2"]
 # Read-only dashboard / API (Phase 6, later).
 api = ["fastapi>=0.111.0", "uvicorn[standard]>=0.29.0"]
 
+[project.scripts]
+# Available as `algo` when the project is pip-installed; otherwise run via
+# `uv run python scripts/algo.py <command>`.
+algo = "algotrading.cli:main"
+
 [dependency-groups]
 dev = [
     "ruff>=0.4.4",
