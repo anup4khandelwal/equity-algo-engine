@@ -18,6 +18,7 @@ from .optimize import (
     grid_search,
     walk_forward,
 )
+from .report import render_html
 from .rotation import RotationConfig, build_panel, run_rotation
 from .simulator import BacktestConfig, BacktestResult, Trade, run
 
@@ -41,6 +42,7 @@ __all__ = [
     "compute_metrics",
     "expand_grid",
     "monte_carlo",
+    "render_html",
     "grid_search",
     "max_drawdown",
     "run",

@@ -63,6 +63,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="N",
         help="Bootstrap trades N times for a confidence band (0 = off).",
     )
+    parser.add_argument(
+        "--report", metavar="PATH", help="Write a self-contained HTML report to PATH."
+    )
     return parser.parse_args(argv)
 
 
@@ -151,6 +154,17 @@ def main(argv: list[str] | None = None) -> int:
         mc = monte_carlo(result, n_simulations=args.monte_carlo, seed=42)
         print(f"\nMonte-Carlo bootstrap ({args.monte_carlo} sims):\n")
         print(mc.as_table())
+
+    if args.report:
+        from pathlib import Path as _Path
+
+        from algotrading.backtest.report import render_html
+
+        title = f"ORB backtest — {args.exchange}:{args.symbol} ({args.from_date} → {args.to_date})"
+        _Path(args.report).write_text(
+            render_html(metrics, result.equity_curve, title), encoding="utf-8"
+        )
+        print(f"\nReport written to {args.report}")
     return 0
 
 
