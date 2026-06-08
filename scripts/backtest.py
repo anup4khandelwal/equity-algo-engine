@@ -56,6 +56,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Warn about trading days (config/nse_holidays.json) with no bars.",
     )
+    parser.add_argument(
+        "--monte-carlo",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Bootstrap trades N times for a confidence band (0 = off).",
+    )
     return parser.parse_args(argv)
 
 
@@ -137,6 +144,13 @@ def main(argv: list[str] | None = None) -> int:
         f"({args.from_date} → {args.to_date}), {len(bars)} bars\n"
     )
     print(metrics.as_table())
+
+    if args.monte_carlo > 0:
+        from algotrading.backtest.montecarlo import monte_carlo
+
+        mc = monte_carlo(result, n_simulations=args.monte_carlo, seed=42)
+        print(f"\nMonte-Carlo bootstrap ({args.monte_carlo} sims):\n")
+        print(mc.as_table())
     return 0
 
 

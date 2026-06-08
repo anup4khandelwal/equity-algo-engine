@@ -10,6 +10,7 @@ from .metrics import (
     sharpe_ratio,
     sortino_ratio,
 )
+from .montecarlo import MonteCarloResult, bootstrap_trades, monte_carlo
 from .optimize import (
     Fold,
     WalkForwardResult,
@@ -28,15 +29,18 @@ __all__ = [
     "CostConfig",
     "Fold",
     "Metrics",
+    "MonteCarloResult",
     "Product",
     "RotationConfig",
     "Trade",
     "WalkForwardResult",
+    "bootstrap_trades",
     "build_panel",
     "charges_for_fill",
     "compare_to_benchmark",
     "compute_metrics",
     "expand_grid",
+    "monte_carlo",
     "grid_search",
     "max_drawdown",
     "run",
