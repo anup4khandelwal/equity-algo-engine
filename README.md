@@ -92,6 +92,10 @@ cd frontend && npm install && npm run dev         # UI on http://localhost:3000
 
 ## Setup
 
+> 📖 Full step-by-step runbook: [`docs/RUNNING_LOCALLY.md`](./docs/RUNNING_LOCALLY.md)
+> (prerequisites, secrets, DB, backfill, backtest, paper-trade, dashboard,
+> troubleshooting).
+
 ```bash
 # 1. Install dependencies (runtime + dev) into a managed virtualenv
 uv sync
