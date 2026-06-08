@@ -112,6 +112,96 @@ def _daily_equity(equity_curve: Sequence[tuple[datetime, float]]) -> list[float]
     return [daily[day] for day in sorted(daily)]
 
 
+def beta(strategy_returns: Sequence[float], benchmark_returns: Sequence[float]) -> float:
+    """Sensitivity of strategy returns to the benchmark (cov / var)."""
+    n = min(len(strategy_returns), len(benchmark_returns))
+    if n < 2:
+        return 0.0
+    s, b = strategy_returns[:n], benchmark_returns[:n]
+    ms, mb = statistics.fmean(s), statistics.fmean(b)
+    cov = sum((si - ms) * (bi - mb) for si, bi in zip(s, b, strict=False))
+    var_b = sum((bi - mb) ** 2 for bi in b)
+    return cov / var_b if var_b > 0 else 0.0
+
+
+def alpha(
+    strategy_returns: Sequence[float],
+    benchmark_returns: Sequence[float],
+    periods_per_year: int = TRADING_DAYS_PER_YEAR,
+    risk_free: float = 0.0,
+) -> float:
+    """Annualised Jensen's alpha (linear annualisation of the per-period alpha)."""
+    n = min(len(strategy_returns), len(benchmark_returns))
+    if n < 2:
+        return 0.0
+    s, b = strategy_returns[:n], benchmark_returns[:n]
+    rf = risk_free / periods_per_year
+    b_beta = beta(s, b)
+    per_period = (statistics.fmean(s) - rf) - b_beta * (statistics.fmean(b) - rf)
+    return per_period * periods_per_year
+
+
+def information_ratio(
+    strategy_returns: Sequence[float],
+    benchmark_returns: Sequence[float],
+    periods_per_year: int = TRADING_DAYS_PER_YEAR,
+) -> float:
+    """Annualised active return divided by tracking error."""
+    n = min(len(strategy_returns), len(benchmark_returns))
+    if n < 2:
+        return 0.0
+    active = [s - b for s, b in zip(strategy_returns[:n], benchmark_returns[:n], strict=False)]
+    sd = statistics.stdev(active)
+    if sd == 0:
+        return 0.0
+    return (statistics.fmean(active) / sd) * sqrt(periods_per_year)
+
+
+def _aligned_returns(
+    a_curve: Sequence[tuple[datetime, float]],
+    b_curve: Sequence[tuple[datetime, float]],
+) -> tuple[list[float], list[float]]:
+    """Daily returns of two equity curves over their common dates."""
+    a = {ts.date(): v for ts, v in a_curve}
+    b = {ts.date(): v for ts, v in b_curve}
+    dates = sorted(set(a) & set(b))
+    ra, rb = [], []
+    for prev, curr in zip(dates, dates[1:], strict=False):
+        if a[prev] and b[prev]:
+            ra.append((a[curr] - a[prev]) / a[prev])
+            rb.append((b[curr] - b[prev]) / b[prev])
+    return ra, rb
+
+
+@dataclass(frozen=True)
+class BenchmarkStats:
+    """Strategy performance relative to a benchmark (e.g. Nifty)."""
+
+    alpha: float
+    beta: float
+    information_ratio: float
+    correlation: float
+
+
+def compare_to_benchmark(
+    result: BacktestResult,
+    benchmark: Sequence[tuple[datetime, float]],
+    periods_per_year: int = TRADING_DAYS_PER_YEAR,
+) -> BenchmarkStats:
+    """Compute alpha/beta/information-ratio/correlation vs a benchmark curve."""
+    s, b = _aligned_returns(result.equity_curve, benchmark)
+    try:
+        corr = statistics.correlation(s, b) if len(s) >= 2 else 0.0
+    except statistics.StatisticsError:  # constant series
+        corr = 0.0
+    return BenchmarkStats(
+        alpha=alpha(s, b, periods_per_year),
+        beta=beta(s, b),
+        information_ratio=information_ratio(s, b, periods_per_year),
+        correlation=corr,
+    )
+
+
 @dataclass(frozen=True)
 class Metrics:
     """Summary statistics for a backtest run."""

@@ -2,7 +2,9 @@
 
 from .costs import Charges, CostConfig, Product, charges_for_fill
 from .metrics import (
+    BenchmarkStats,
     Metrics,
+    compare_to_benchmark,
     compute_metrics,
     max_drawdown,
     sharpe_ratio,
@@ -21,6 +23,7 @@ from .simulator import BacktestConfig, BacktestResult, Trade, run
 __all__ = [
     "BacktestConfig",
     "BacktestResult",
+    "BenchmarkStats",
     "Charges",
     "CostConfig",
     "Fold",
@@ -31,6 +34,7 @@ __all__ = [
     "WalkForwardResult",
     "build_panel",
     "charges_for_fill",
+    "compare_to_benchmark",
     "compute_metrics",
     "expand_grid",
     "grid_search",
