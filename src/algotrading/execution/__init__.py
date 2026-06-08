@@ -3,8 +3,10 @@
 from .analytics import (
     FillEvent,
     RoundTrip,
+    StrategyPnl,
     event_from_fill,
     event_from_record,
+    pnl_by_strategy,
     round_trips,
 )
 from .gateway import (
@@ -29,7 +31,9 @@ __all__ = [
     "PaperGateway",
     "Portfolio",
     "RoundTrip",
+    "StrategyPnl",
     "event_from_fill",
     "event_from_record",
+    "pnl_by_strategy",
     "round_trips",
 ]

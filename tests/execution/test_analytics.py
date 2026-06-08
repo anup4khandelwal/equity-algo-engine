@@ -83,6 +83,23 @@ def test_multiple_instruments_independent() -> None:
     assert by_token[2].net_pnl == pytest.approx(-50.0)
 
 
+def test_pnl_by_strategy_groups_and_aggregates() -> None:
+    from algotrading.execution.analytics import pnl_by_strategy
+
+    events = [
+        FillEvent(1, "BUY", 10, 100.0, 0.0, T0, "orb"),
+        FillEvent(1, "SELL", 10, 110.0, 0.0, T0 + timedelta(minutes=1), "orb"),  # +100
+        FillEvent(2, "BUY", 10, 100.0, 0.0, T0, "rsi2"),
+        FillEvent(2, "SELL", 10, 95.0, 0.0, T0 + timedelta(minutes=1), "rsi2"),  # -50
+    ]
+    stats = {s.strategy: s for s in pnl_by_strategy(round_trips(events))}
+    assert stats["orb"].net_pnl == pytest.approx(100.0)
+    assert stats["orb"].win_rate == 1.0
+    assert stats["rsi2"].net_pnl == pytest.approx(-50.0)
+    assert stats["rsi2"].win_rate == 0.0
+    assert stats["orb"].trades == 1
+
+
 def test_adapters_from_fill_and_record() -> None:
     fill = Fill(
         Order(1, Side.BUY, 10, reference_price=100.0, tag="orb"),

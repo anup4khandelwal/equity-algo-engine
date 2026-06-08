@@ -19,6 +19,7 @@ from .service import (
     pnl_summary,
     positions_view,
     strategy_attribution,
+    strategy_pnl_view,
     trades_view,
 )
 
@@ -78,5 +79,9 @@ def create_app(
     @app.get("/attribution")
     def attribution() -> list[dict]:
         return strategy_attribution(state)
+
+    @app.get("/strategy-pnl")
+    def strategy_pnl() -> list[dict]:
+        return strategy_pnl_view(state)
 
     return app

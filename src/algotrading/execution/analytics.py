@@ -45,6 +45,40 @@ class RoundTrip:
     holding_seconds: float
 
 
+@dataclass(frozen=True)
+class StrategyPnl:
+    """Realised P&L for one strategy, from its completed round trips."""
+
+    strategy: str
+    trades: int
+    net_pnl: float
+    gross_pnl: float
+    charges: float
+    win_rate: float
+
+
+def pnl_by_strategy(trips: Sequence[RoundTrip]) -> list[StrategyPnl]:
+    """Aggregate completed round trips into per-strategy realised P&L."""
+    groups: dict[str, list[RoundTrip]] = {}
+    for trip in trips:
+        groups.setdefault(trip.strategy, []).append(trip)
+
+    out: list[StrategyPnl] = []
+    for strategy, ts in sorted(groups.items()):
+        wins = sum(1 for t in ts if t.net_pnl > 0)
+        out.append(
+            StrategyPnl(
+                strategy=strategy,
+                trades=len(ts),
+                net_pnl=sum(t.net_pnl for t in ts),
+                gross_pnl=sum(t.gross_pnl for t in ts),
+                charges=sum(t.charges for t in ts),
+                win_rate=wins / len(ts),
+            )
+        )
+    return out
+
+
 def event_from_fill(fill: Any) -> FillEvent:
     """Adapt an execution ``Fill`` to a :class:`FillEvent`."""
     order = fill.order

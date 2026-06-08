@@ -12,6 +12,7 @@ from .service import (
     pnl_summary,
     positions_view,
     strategy_attribution,
+    strategy_pnl_view,
     trades_view,
 )
 
@@ -22,5 +23,6 @@ __all__ = [
     "pnl_summary",
     "positions_view",
     "strategy_attribution",
+    "strategy_pnl_view",
     "trades_view",
 ]

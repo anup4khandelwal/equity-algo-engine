@@ -88,6 +88,18 @@ def test_closed_trades_view_reconstructs_round_trips() -> None:
     assert rows[0]["net_pnl"] == pytest.approx((110.0 - 100.0) * 100 - (10.0 + 12.0))
 
 
+def test_strategy_pnl_view_realised_per_strategy() -> None:
+    from algotrading.api.service import strategy_pnl_view
+
+    rows = strategy_pnl_view(_state())
+    # _state: one completed orb round trip (+978 net); momentum buy is still open.
+    by = {r["strategy"]: r for r in rows}
+    assert "orb" in by
+    assert by["orb"]["trades"] == 1
+    assert by["orb"]["net_pnl"] == pytest.approx((110.0 - 100.0) * 100 - 22.0)
+    assert "momentum" not in by  # open position -> no realised round trip
+
+
 def test_strategy_attribution_groups_by_tag() -> None:
     attr = {row["strategy"]: row for row in strategy_attribution(_state())}
     assert attr["orb"]["fills"] == 2
