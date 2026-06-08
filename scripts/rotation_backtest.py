@@ -41,6 +41,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rebalance-every", type=int, default=21)
     parser.add_argument("--capital", type=float, default=1_000_000.0)
     parser.add_argument("--slippage-bps", type=float, default=5.0)
+    parser.add_argument("--corp-actions", help="JSON of corporate actions to back-adjust prices.")
     return parser.parse_args(argv)
 
 
@@ -68,6 +69,16 @@ def main(argv: list[str] | None = None) -> int:
     if not series:
         print("No data for the requested universe. Backfill first.", file=sys.stderr)
         return 1
+
+    if args.corp_actions:
+        from algotrading.data.corporate_actions import (
+            adjust_instrument_bars,
+            load_corporate_actions,
+        )
+
+        actions = load_corporate_actions(args.corp_actions)
+        series = {t: adjust_instrument_bars(b, actions, t) for t, b in series.items()}
+        print(f"Applied {len(actions)} corporate action(s) across the universe.")
 
     panel = build_panel(series)
     config = RotationConfig(

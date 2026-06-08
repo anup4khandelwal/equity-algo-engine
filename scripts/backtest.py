@@ -50,6 +50,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--product", choices=[p.value for p in Product], default=Product.INTRADAY.value
     )
+    parser.add_argument("--corp-actions", help="JSON of corporate actions to back-adjust prices.")
+    parser.add_argument(
+        "--warn-gaps",
+        action="store_true",
+        help="Warn about trading days (config/nse_holidays.json) with no bars.",
+    )
     return parser.parse_args(argv)
 
 
@@ -85,6 +91,30 @@ def main(argv: list[str] | None = None) -> int:
         )
         for row in rows
     ]
+
+    if args.corp_actions:
+        from algotrading.data.corporate_actions import (
+            adjust_instrument_bars,
+            load_corporate_actions,
+        )
+
+        actions = load_corporate_actions(args.corp_actions)
+        bars = adjust_instrument_bars(bars, actions, instrument.instrument_token)
+        print(f"Applied {len(actions)} corporate action(s) (split/bonus adjustment).")
+
+    if args.warn_gaps:
+        from pathlib import Path as _Path
+
+        from algotrading.data.calendar import TradingCalendar
+
+        holidays = _Path("config/nse_holidays.json")
+        cal = TradingCalendar.from_file(holidays) if holidays.exists() else TradingCalendar()
+        present = {b.time.date() for b in bars}
+        missing = cal.missing_sessions(
+            date.fromisoformat(args.from_date), date.fromisoformat(args.to_date), present
+        )
+        if missing:
+            print(f"Warning: {len(missing)} trading day(s) in range have no bars.", file=sys.stderr)
 
     strategy = OpeningRangeBreakout(
         instrument.instrument_token,
