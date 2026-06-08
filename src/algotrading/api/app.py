@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .service import (
     DashboardState,
+    closed_trades_view,
     equity_curve_view,
     pnl_summary,
     positions_view,
@@ -65,6 +66,10 @@ def create_app(
     @app.get("/trades")
     def trades() -> list[dict]:
         return trades_view(state)
+
+    @app.get("/closed-trades")
+    def closed_trades() -> list[dict]:
+        return closed_trades_view(state)
 
     @app.get("/equity")
     def equity() -> list[dict]:

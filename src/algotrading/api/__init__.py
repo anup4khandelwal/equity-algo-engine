@@ -7,6 +7,7 @@ Only the framework-agnostic service layer is exported here; import
 
 from .service import (
     DashboardState,
+    closed_trades_view,
     equity_curve_view,
     pnl_summary,
     positions_view,
@@ -16,6 +17,7 @@ from .service import (
 
 __all__ = [
     "DashboardState",
+    "closed_trades_view",
     "equity_curve_view",
     "pnl_summary",
     "positions_view",

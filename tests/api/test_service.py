@@ -77,6 +77,17 @@ def test_equity_curve_view() -> None:
     assert rows == [{"time": NOW.isoformat(), "equity": 100_250.0}]
 
 
+def test_closed_trades_view_reconstructs_round_trips() -> None:
+    from algotrading.api.service import closed_trades_view
+
+    rows = closed_trades_view(_state())
+    # _state has an ORB buy then sell of 100 -> one completed long round trip.
+    assert len(rows) == 1
+    assert rows[0]["direction"] == "BUY"
+    assert rows[0]["quantity"] == 100
+    assert rows[0]["net_pnl"] == pytest.approx((110.0 - 100.0) * 100 - (10.0 + 12.0))
+
+
 def test_strategy_attribution_groups_by_tag() -> None:
     attr = {row["strategy"]: row for row in strategy_attribution(_state())}
     assert attr["orb"]["fills"] == 2
