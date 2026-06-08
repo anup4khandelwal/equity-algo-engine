@@ -55,3 +55,38 @@ def test_invalid_ratios_raise() -> None:
         split_action(1, date(2026, 6, 10), 0, 5)
     with pytest.raises(ValueError):
         bonus_action(1, date(2026, 6, 10), 1, 0)
+
+
+def test_load_corporate_actions_from_file(tmp_path) -> None:
+    import json
+
+    from algotrading.data.corporate_actions import load_corporate_actions
+
+    path = tmp_path / "ca.json"
+    path.write_text(
+        json.dumps(
+            {
+                "actions": [
+                    {"instrument_token": 1, "ex_date": "2026-06-10", "ratio": 0.2, "kind": "split"},
+                    {"instrument_token": 2, "ex_date": "2026-07-01", "ratio": 0.5},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    actions = load_corporate_actions(path)
+    assert len(actions) == 2
+    assert actions[0].instrument_token == 1 and actions[0].ratio == 0.2
+    assert actions[1].kind == "split"  # default kind
+
+
+def test_adjust_instrument_bars_filters_by_token() -> None:
+    from algotrading.data.corporate_actions import adjust_instrument_bars
+
+    action = split_action(1, date(2026, 6, 10), old=1, new=5)  # only token 1
+    bars = [_bar(9, 1000.0)]  # token 1 (from helper)
+    adjusted = adjust_instrument_bars(bars, [action], instrument_token=1)
+    assert adjusted[0].close == pytest.approx(200.0)
+    # A different token is unaffected (no relevant actions -> unchanged copy).
+    unchanged = adjust_instrument_bars(bars, [action], instrument_token=999)
+    assert unchanged[0].close == pytest.approx(1000.0)

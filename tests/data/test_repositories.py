@@ -109,3 +109,32 @@ def test_ohlc_upsert_overwrites_existing_bar(db_session) -> None:
     assert len(result) == 1
     assert result[0].close == 2.0
     assert result[0].volume == 50
+
+
+def test_bar_dates_returns_distinct_sorted(db_session) -> None:
+    from datetime import date
+
+    InstrumentRepository(db_session).upsert_many([_instrument()])
+    db_session.flush()
+    ohlc = OHLCRepository(db_session)
+    rows = [
+        {
+            "instrument_token": 408065,
+            "time": datetime(2026, 6, day, hour, 15, tzinfo=UTC),
+            "open": 1.0,
+            "high": 1.0,
+            "low": 1.0,
+            "close": 1.0,
+            "volume": 1,
+        }
+        for day, hour in [(3, 9), (3, 10), (4, 9)]  # two bars on the 3rd, one on the 4th
+    ]
+    ohlc.upsert_bars(rows)
+    db_session.flush()
+
+    dates = ohlc.bar_dates(
+        408065,
+        datetime(2026, 6, 1, tzinfo=UTC),
+        datetime(2026, 6, 30, tzinfo=UTC),
+    )
+    assert dates == [date(2026, 6, 3), date(2026, 6, 4)]

@@ -89,6 +89,52 @@ def equity_curve_view(state: DashboardState) -> list[dict[str, Any]]:
     return [{"time": ts.isoformat(), "equity": equity} for ts, equity in state.equity_curve]
 
 
+def closed_trades_view(state: DashboardState) -> list[dict[str, Any]]:
+    """Completed round-trip trades reconstructed from the fill history."""
+    from algotrading.execution.analytics import event_from_fill, round_trips
+
+    trips = round_trips([event_from_fill(f) for f in state.fills])
+    return [
+        {
+            "instrument_token": t.instrument_token,
+            "strategy": t.strategy,
+            "direction": t.direction,
+            "quantity": t.quantity,
+            "entry_time": t.entry_time.isoformat(),
+            "entry_price": t.entry_price,
+            "exit_time": t.exit_time.isoformat(),
+            "exit_price": t.exit_price,
+            "gross_pnl": t.gross_pnl,
+            "charges": t.charges,
+            "net_pnl": t.net_pnl,
+            "holding_seconds": t.holding_seconds,
+        }
+        for t in trips
+    ]
+
+
+def strategy_pnl_view(state: DashboardState) -> list[dict[str, Any]]:
+    """Per-strategy realised P&L from completed round trips."""
+    from algotrading.execution.analytics import (
+        event_from_fill,
+        pnl_by_strategy,
+        round_trips,
+    )
+
+    trips = round_trips([event_from_fill(f) for f in state.fills])
+    return [
+        {
+            "strategy": s.strategy,
+            "trades": s.trades,
+            "net_pnl": s.net_pnl,
+            "gross_pnl": s.gross_pnl,
+            "charges": s.charges,
+            "win_rate": s.win_rate,
+        }
+        for s in pnl_by_strategy(trips)
+    ]
+
+
 def strategy_attribution(state: DashboardState) -> list[dict[str, Any]]:
     """Per-strategy (order tag) activity and cost summary."""
     groups: dict[str, dict[str, float]] = {}

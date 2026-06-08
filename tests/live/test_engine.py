@@ -112,6 +112,22 @@ def test_fill_listener_receives_filled_orders() -> None:
     assert all(f.status.value == "FILLED" for f in received)
 
 
+def test_protective_stop_loss_exits_position() -> None:
+    t1 = datetime(2026, 6, 3, 9, 30)
+    # Strategy only enters; no exit logic — the engine stop must close it.
+    engine = PaperTradingEngine(
+        ScriptedStrategy({t1: _entry(t1, Side.BUY)}),
+        config=EngineConfig(fixed_quantity=10, use_atr_sizing=False, stop_loss_pct=0.02),
+    )
+    engine.on_bar(_bar(9, 30, 100.0))  # enter long at 100
+    assert engine.portfolio.open_position_count() == 1
+
+    # Next bar dips to 97 (< 98 stop) -> stopped out.
+    engine.on_bar(Bar(1, datetime(2026, 6, 3, 9, 31), 100.0, 100.0, 97.0, 98.0))
+    assert engine.portfolio.open_position_count() == 0
+    assert engine.trade_log.fills[-1].order.reason == "stop_loss"
+
+
 def test_atr_sizing_used_when_enabled() -> None:
     # Build enough history for ATR, then enter.
     signals = {}

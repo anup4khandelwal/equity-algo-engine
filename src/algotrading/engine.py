@@ -31,6 +31,7 @@ from algotrading.live.notifier import LoggingNotifier, Notifier
 from algotrading.live.trade_log import TradeLog
 from algotrading.risk.manager import RiskManager
 from algotrading.risk.sizing import atr_position_size, average_true_range
+from algotrading.risk.stops import ProtectiveStops, StopConfig
 from algotrading.strategies.base import Bar, Position, Side, Signal, SignalType, Strategy
 
 
@@ -46,6 +47,9 @@ class EngineConfig:
     atr_stop_multiple: float = 1.5
     fixed_quantity: int | None = None
     history_size: int = 200
+    # Engine-level protective stops (apply to every strategy; None = disabled).
+    stop_loss_pct: float | None = None
+    trailing_pct: float | None = None
 
 
 @dataclass
@@ -161,9 +165,29 @@ def _process_bar(
     bar: Bar,
     bars: list[Bar],
     last_prices: dict[int, float],
+    stops: ProtectiveStops | None = None,
 ) -> None:
     """Route one bar for one strategy through risk → execution (shared logic)."""
-    position = router.portfolio.positions.get(bar.instrument_token)
+    token = bar.instrument_token
+    position = router.portfolio.positions.get(token)
+
+    # Engine-level protective stops take precedence over the strategy's logic.
+    if position is None:
+        if stops is not None:
+            stops.on_close(token)
+    elif stops is not None:
+        hit = stops.update_and_check(token, position, bar)
+        if hit is not None:
+            router.exit_position(
+                strategy_name=strategy.name,
+                bar=bar,
+                position=position,
+                ref_price=hit.price,
+                reason=hit.reason,
+            )
+            stops.on_close(token)
+            return
+
     signal = strategy.on_bar(bar, position)
 
     if position is not None and router.risk.should_square_off(bar.time.time()):
@@ -197,6 +221,11 @@ def _process_bar(
         )
 
 
+def _build_stops(config: EngineConfig) -> ProtectiveStops | None:
+    cfg = StopConfig(config.stop_loss_pct, config.trailing_pct)
+    return ProtectiveStops(cfg) if cfg.enabled else None
+
+
 @dataclass
 class PaperTradingEngine:
     """Single-strategy paper-trading engine driven bar by bar."""
@@ -220,6 +249,7 @@ class PaperTradingEngine:
             self.config,
             self.fill_listener,
         )
+        self._stops = _build_stops(self.config)
         self._bars: list[Bar] = []
         self._date = None
         self.equity_curve: list[tuple] = []
@@ -242,6 +272,7 @@ class PaperTradingEngine:
             bar=bar,
             bars=self._bars,
             last_prices=self.last_prices,
+            stops=self._stops,
         )
 
         day_pnl = self.portfolio.day_pnl(self.last_prices)
@@ -273,6 +304,7 @@ class MultiStrategyEngine:
             self.config,
             self.fill_listener,
         )
+        self._stops = _build_stops(self.config)
         self._strategies: dict[int, Strategy] = {}
         self._history: dict[int, list[Bar]] = {}
         self._date = None
@@ -310,6 +342,7 @@ class MultiStrategyEngine:
                 bar=bar,
                 bars=history,
                 last_prices=self.last_prices,
+                stops=self._stops,
             )
 
         day_pnl = self.portfolio.day_pnl(self.last_prices)

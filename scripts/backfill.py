@@ -56,6 +56,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=60,
         help="Max days per Kite request (default: 60).",
     )
+    parser.add_argument(
+        "--check-gaps",
+        action="store_true",
+        help="After storing, report NSE trading sessions with no bars.",
+    )
     return parser.parse_args(argv)
 
 
@@ -82,6 +87,19 @@ def main(argv: list[str] | None = None) -> int:
         instrument_repo = InstrumentRepository(session)
         ohlc_repo = OHLCRepository(session)
 
+        calendar = None
+        if args.check_gaps:
+            from datetime import datetime as _dt
+            from datetime import time as _t
+            from pathlib import Path as _Path
+
+            from algotrading.data.calendar import TradingCalendar
+
+            holidays = _Path("config/nse_holidays.json")
+            calendar = (
+                TradingCalendar.from_file(holidays) if holidays.exists() else TradingCalendar()
+            )
+
         for symbol in symbols:
             instrument = instrument_repo.get_by_symbol(args.exchange, symbol)
             if instrument is None:
@@ -99,7 +117,18 @@ def main(argv: list[str] | None = None) -> int:
                 interval=args.interval,
                 chunk_days=args.chunk_days,
             )
-            print(f"  {args.exchange}:{symbol}: stored {stored} bars.")
+            summary = f"  {args.exchange}:{symbol}: stored {stored} bars."
+            if calendar is not None:
+                present = set(
+                    ohlc_repo.bar_dates(
+                        instrument.instrument_token,
+                        _dt.combine(start, _t.min),
+                        _dt.combine(end, _t.max),
+                    )
+                )
+                missing = calendar.missing_sessions(start, end, present)
+                summary += f" {len(missing)} trading-day gap(s)."
+            print(summary)
 
     return 0
 

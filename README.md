@@ -11,6 +11,22 @@ against the live market.
 > and [`CLAUDE_CODE_PROMPT.md`](./CLAUDE_CODE_PROMPT.md) for the complete brief
 > and phased build order.
 
+## Architecture
+
+Full docs — Mermaid (renders inline) + rendered PNG/SVG, plus live/backtest data
+flows and layer responsibilities — in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+
+<table>
+  <tr>
+    <td align="center"><a href="docs/architecture.png"><img src="docs/architecture.png" width="380" alt="System architecture"/></a><br/><b>System architecture</b></td>
+    <td align="center"><a href="docs/deployment.png"><img src="docs/deployment.png" width="380" alt="Deployment view"/></a><br/><b>Deployment view</b></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="docs/schema.png"><img src="docs/schema.png" width="380" alt="Database schema"/></a><br/><b>TimescaleDB schema</b></td>
+    <td align="center"><a href="docs/classes.png"><img src="docs/classes.png" width="380" alt="Class diagram"/></a><br/><b>Strategy &amp; OrderGateway classes</b></td>
+  </tr>
+</table>
+
 ## Status
 
 All phases from the brief are implemented:
@@ -55,6 +71,18 @@ uv run python scripts/dashboard.py --symbol INFY --from 2026-01-01 --to 2026-03-
 
 Endpoints: `GET /positions /pnl /trades /equity /attribution /health`. Build a
 state programmatically with `DashboardState.from_engine(engine)`.
+
+### Web UI (Next.js)
+
+A proper dashboard UI lives in [`frontend/`](./frontend) — cards, an equity
+chart, and live-polling tables over the API above.
+
+```bash
+# 1. backend
+uv run python scripts/dashboard.py --demo        # API on :8000
+# 2. frontend
+cd frontend && npm install && npm run dev         # UI on http://localhost:3000
+```
 
 ## Requirements
 

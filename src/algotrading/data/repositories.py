@@ -6,10 +6,10 @@ idempotent (existing rows are refreshed rather than duplicated).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -83,6 +83,21 @@ class OHLCRepository:
             .order_by(OHLCBar.time)
         )
         return list(self.session.execute(stmt).scalars())
+
+    def bar_dates(self, instrument_token: int, start: datetime, end: datetime) -> list[date]:
+        """Distinct calendar dates that have at least one bar, sorted."""
+        day = func.date(OHLCBar.time)
+        stmt = (
+            select(day)
+            .where(
+                OHLCBar.instrument_token == instrument_token,
+                OHLCBar.time >= start,
+                OHLCBar.time <= end,
+            )
+            .distinct()
+            .order_by(day)
+        )
+        return [d for d in self.session.execute(stmt).scalars()]
 
 
 def fill_to_record(fill: Fill) -> FillRecord:

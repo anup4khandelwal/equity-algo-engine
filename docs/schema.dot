@@ -1,0 +1,20 @@
+digraph schema {
+  rankdir=LR;
+  labelloc="t";
+  fontname="Helvetica";
+  label="equity-algo-engine — TimescaleDB schema";
+  node [shape=record, fontname="Helvetica", fontsize=10, style=filled, fillcolor="#eef2f7", color="#9aa7b8"];
+  edge [fontname="Helvetica", fontsize=9, color="#6b7686"];
+
+  instruments [fillcolor="#e7e0fb", label="{instruments|+ instrument_token : BIGINT  (PK)\l  exchange_token : BIGINT\l  tradingsymbol : VARCHAR(64)  [idx]\l  name : VARCHAR(256)\l  exchange : VARCHAR(16)\l  segment : VARCHAR(32)\l  instrument_type : VARCHAR(16)\l  lot_size : INTEGER\l  tick_size : FLOAT\l  expiry : DATE\l  strike : FLOAT\l  last_price : FLOAT\l  updated_at : TIMESTAMPTZ\l  idx (exchange, tradingsymbol)\l}"];
+
+  ohlc_bars [fillcolor="#cdeeee", label="{ohlc_bars   (TimescaleDB hypertable)|+ instrument_token : BIGINT  (PK, FK)\l+ time : TIMESTAMPTZ  (PK, partition key)\l  open : FLOAT\l  high : FLOAT\l  low : FLOAT\l  close : FLOAT\l  volume : BIGINT\l}"];
+
+  aggs [shape=note, fillcolor="#f0fbfb", label="continuous aggregates\l  ohlc_5min / ohlc_15min / ohlc_60min\l  time_bucket + first/max/min/last/sum\l  (auto-refresh policies)\l"];
+
+  fills [fillcolor="#d9f2e3", label="{fills   (paper-trade execution log)|+ id : BIGSERIAL  (PK)\l  time : TIMESTAMPTZ  [idx]\l  instrument_token : BIGINT  [idx]\l  side : VARCHAR(4)\l  quantity : INTEGER\l  price : FLOAT\l  charges : FLOAT\l  strategy : VARCHAR(64)  [idx]\l  reason : VARCHAR(32)\l  product : VARCHAR(16)\l  status : VARCHAR(16)\l}"];
+
+  instruments -> ohlc_bars [arrowhead=crow, label="FK instrument_token\n(ON DELETE CASCADE)"];
+  ohlc_bars -> aggs [style=dashed, arrowhead=vee, label="derives"];
+  instruments -> fills [style=dotted, arrowhead=crow, label="logical ref\n(not an enforced FK)"];
+}

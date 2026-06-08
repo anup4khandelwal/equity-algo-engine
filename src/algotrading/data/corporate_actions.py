@@ -8,9 +8,11 @@ adjust volume inversely so traded value is preserved.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 from algotrading.strategies.base import Bar
 
@@ -37,6 +39,33 @@ def bonus_action(token: int, ex_date: date, held: int, bonus: int) -> CorporateA
     if held <= 0 or bonus <= 0:
         raise ValueError("held/bonus must be positive")
     return CorporateAction(token, ex_date, held / (held + bonus), "bonus")
+
+
+def load_corporate_actions(path: str | Path) -> list[CorporateAction]:
+    """Load corporate actions from JSON.
+
+    Accepts a bare list, or an object with an ``actions`` list. Each record:
+    ``{"instrument_token", "ex_date" (YYYY-MM-DD), "ratio", "kind"?}``.
+    """
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    items = data["actions"] if isinstance(data, dict) else data
+    return [
+        CorporateAction(
+            instrument_token=int(r["instrument_token"]),
+            ex_date=date.fromisoformat(r["ex_date"]),
+            ratio=float(r["ratio"]),
+            kind=str(r.get("kind", "split")),
+        )
+        for r in items
+    ]
+
+
+def adjust_instrument_bars(
+    bars: Sequence[Bar], actions: Sequence[CorporateAction], instrument_token: int
+) -> list[Bar]:
+    """Apply only the actions for ``instrument_token`` (no-op if none apply)."""
+    relevant = [a for a in actions if a.instrument_token == instrument_token]
+    return adjust_bars(bars, relevant) if relevant else list(bars)
 
 
 def adjust_bars(bars: Sequence[Bar], actions: Sequence[CorporateAction]) -> list[Bar]:
