@@ -14,10 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .service import (
     DashboardState,
+    candles_view,
     closed_trades_view,
     equity_curve_view,
     pnl_summary,
     positions_view,
+    regime_view,
     strategy_attribution,
     strategy_pnl_view,
     trades_view,
@@ -83,5 +85,13 @@ def create_app(
     @app.get("/strategy-pnl")
     def strategy_pnl() -> list[dict]:
         return strategy_pnl_view(state)
+
+    @app.get("/candles")
+    def candles(instrument_token: int | None = None) -> list[dict]:
+        return candles_view(state, instrument_token)
+
+    @app.get("/regimes")
+    def regimes() -> list[dict]:
+        return regime_view(state)
 
     return app

@@ -106,3 +106,26 @@ def test_strategy_attribution_groups_by_tag() -> None:
     assert attr["orb"]["quantity"] == 200
     assert attr["orb"]["charges"] == pytest.approx(22.0)
     assert attr["momentum"]["fills"] == 1
+
+
+def test_candles_and_regime_views() -> None:
+    from datetime import timedelta
+
+    from algotrading.api.service import DashboardState, candles_view, regime_view
+    from algotrading.strategies.base import Bar
+
+    start = NOW
+    bars = [
+        Bar(1, start + timedelta(days=i), 100 + 2 * i, 101 + 2 * i, 99 + 2 * i, 100 + 2 * i)
+        for i in range(40)  # strong uptrend -> TRENDING
+    ] + [Bar(2, start, 50, 51, 49, 50)]
+    state = DashboardState(portfolio=Portfolio(), bars=bars)
+
+    candles = candles_view(state, instrument_token=1)
+    assert len(candles) == 40
+    assert candles[0]["open"] == 100 and candles[-1]["close"] == 100 + 2 * 39
+    assert candles_view(state)[0]["instrument_token"] in (1, 2)  # unfiltered includes both
+
+    regimes = {r["instrument_token"]: r for r in regime_view(state)}
+    assert regimes[1]["regime"] == "TRENDING" and regimes[1]["adx"] > 25
+    assert regimes[2]["regime"] == "UNKNOWN"  # one bar -> warm-up

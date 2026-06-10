@@ -26,14 +26,22 @@ class DashboardState:
     fills: list[Fill] = field(default_factory=list)
     equity_curve: list[tuple[datetime, float]] = field(default_factory=list)
     last_prices: dict[int, float] = field(default_factory=dict)
+    bars: list[Any] = field(default_factory=list)  # recent Bar history for charts
 
     @classmethod
     def from_engine(cls, engine: PaperTradingEngine) -> DashboardState:
+        # Bar history: single-strategy engines keep `_bars`; the multi-strategy
+        # engine keeps a per-instrument `_history` dict.
+        bars = list(getattr(engine, "_bars", []) or [])
+        history = getattr(engine, "_history", None)
+        if not bars and isinstance(history, dict):
+            bars = sorted((b for hs in history.values() for b in hs), key=lambda b: b.time)
         return cls(
             portfolio=engine.portfolio,
             fills=engine.trade_log.fills,
             equity_curve=engine.equity_curve,
             last_prices=engine.last_prices,
+            bars=bars,
         )
 
 
@@ -133,6 +141,49 @@ def strategy_pnl_view(state: DashboardState) -> list[dict[str, Any]]:
         }
         for s in pnl_by_strategy(trips)
     ]
+
+
+def candles_view(state: DashboardState, instrument_token: int | None = None) -> list[dict]:
+    """OHLCV candles for charting (optionally filtered to one instrument)."""
+    bars = state.bars
+    if instrument_token is not None:
+        bars = [b for b in bars if b.instrument_token == instrument_token]
+    return [
+        {
+            "time": b.time.isoformat(),
+            "instrument_token": b.instrument_token,
+            "open": b.open,
+            "high": b.high,
+            "low": b.low,
+            "close": b.close,
+            "volume": b.volume,
+        }
+        for b in sorted(bars, key=lambda b: b.time)
+    ]
+
+
+def regime_view(state: DashboardState, adx_period: int = 14) -> list[dict[str, Any]]:
+    """Latest market regime (and ADX) per instrument, from the bar history."""
+    from algotrading.strategies.regime import RegimeDetector
+
+    by_token: dict[int, list] = {}
+    for bar in state.bars:
+        by_token.setdefault(bar.instrument_token, []).append(bar)
+
+    out: list[dict[str, Any]] = []
+    for token, bars in sorted(by_token.items()):
+        detector = RegimeDetector(adx_period=adx_period)
+        regime = None
+        for bar in sorted(bars, key=lambda b: b.time):
+            regime = detector.update(bar)
+        out.append(
+            {
+                "instrument_token": token,
+                "regime": regime.value if regime is not None else "UNKNOWN",
+                "adx": round(detector.last_adx, 2),
+            }
+        )
+    return out
 
 
 def strategy_attribution(state: DashboardState) -> list[dict[str, Any]]:

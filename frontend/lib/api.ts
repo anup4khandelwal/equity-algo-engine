@@ -66,3 +66,43 @@ export function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   return new Intl.NumberFormat("en-IN").format(value);
 }
+
+export interface Candle {
+  time: string;
+  instrument_token: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface RegimeRow {
+  instrument_token: number;
+  regime: string;
+  adx: number;
+}
+
+export interface ClosedTrade {
+  instrument_token: number;
+  strategy: string;
+  direction: string;
+  quantity: number;
+  entry_time: string;
+  entry_price: number;
+  exit_time: string;
+  exit_price: number;
+  gross_pnl: number;
+  charges: number;
+  net_pnl: number;
+  holding_seconds: number;
+}
+
+export interface StrategyPnlRow {
+  strategy: string;
+  trades: number;
+  net_pnl: number;
+  gross_pnl: number;
+  charges: number;
+  win_rate: number;
+}
