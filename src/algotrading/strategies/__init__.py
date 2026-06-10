@@ -3,7 +3,9 @@
 from .base import Bar, Position, Side, Signal, SignalType, Strategy
 from .cross_sectional import momentum_scores, select_top
 from .ensemble import EnsembleStrategy, Member
+from .features import FEATURE_NAMES, FeatureExtractor
 from .ma_crossover import MovingAverageCrossover
+from .ml_strategy import MLStrategy, Scorer
 from .momentum import Momentum
 from .orb import OpeningRangeBreakout
 from .regime import Regime, RegimeDetector, adx, realized_volatility
@@ -12,9 +14,12 @@ from .supertrend import Supertrend
 from .vwap import VWAPReversion
 
 __all__ = [
+    "FEATURE_NAMES",
     "RSI2",
     "Bar",
     "EnsembleStrategy",
+    "FeatureExtractor",
+    "MLStrategy",
     "Member",
     "Momentum",
     "MovingAverageCrossover",
@@ -22,6 +27,7 @@ __all__ = [
     "Position",
     "Regime",
     "RegimeDetector",
+    "Scorer",
     "Side",
     "Signal",
     "SignalType",
