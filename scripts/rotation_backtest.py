@@ -41,6 +41,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rebalance-every", type=int, default=21)
     parser.add_argument("--capital", type=float, default=1_000_000.0)
     parser.add_argument("--slippage-bps", type=float, default=5.0)
+    parser.add_argument(
+        "--weighting",
+        choices=["equal", "inverse_vol"],
+        default="equal",
+        help="Capital allocation: equal-weight or inverse-vol (risk parity).",
+    )
+    parser.add_argument("--vol-lookback", type=int, default=20)
     parser.add_argument("--corp-actions", help="JSON of corporate actions to back-adjust prices.")
     return parser.parse_args(argv)
 
@@ -87,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
         rebalance_every=args.rebalance_every,
         initial_capital=args.capital,
         slippage_bps=args.slippage_bps,
+        weighting=args.weighting,
+        vol_lookback=args.vol_lookback,
     )
     result = run_rotation(panel, config)
     metrics = compute_metrics(result)

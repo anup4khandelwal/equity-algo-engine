@@ -65,3 +65,34 @@ def test_empty_panel_returns_flat_result() -> None:
     result = run_rotation([], RotationConfig())
     assert result.trades == []
     assert result.final_equity == RotationConfig().initial_capital
+
+
+def test_inverse_vol_weighting_favours_the_calmer_name() -> None:
+    from algotrading.backtest.rotation import _target_weights
+
+    history = {
+        1: [100.0 + (0.2 if i % 2 else -0.2) for i in range(30)],  # low vol
+        2: [100.0 + (8.0 if i % 2 else -8.0) for i in range(30)],  # high vol
+    }
+    cfg = RotationConfig(weighting="inverse_vol", vol_lookback=10)
+    weights = _target_weights([1, 2], history, cfg)
+    assert weights[1] > weights[2]  # calmer name gets more capital
+    assert sum(weights.values()) == pytest.approx(1.0)
+
+    equal = _target_weights([1, 2], history, RotationConfig(weighting="equal"))
+    assert equal[1] == equal[2] == pytest.approx(0.5)
+
+
+def test_rotation_runs_with_inverse_vol_and_reconciles() -> None:
+    cfg = RotationConfig(
+        lookback=2,
+        top_n=2,
+        rebalance_every=1,
+        slippage_bps=0.0,
+        weighting="inverse_vol",
+        vol_lookback=3,
+    )
+    result = run_rotation(_trending_panel(), cfg)
+    net = sum(t.net_pnl for t in result.trades)
+    assert result.trades
+    assert net == pytest.approx(result.final_equity - cfg.initial_capital, rel=1e-6)

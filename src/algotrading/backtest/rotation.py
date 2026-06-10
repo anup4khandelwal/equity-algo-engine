@@ -16,6 +16,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from algotrading.risk.sizing import inverse_vol_weights, return_volatility
 from algotrading.strategies.base import Bar, Side
 from algotrading.strategies.cross_sectional import momentum_scores, select_top
 
@@ -36,6 +37,8 @@ class RotationConfig:
     product: Product = Product.DELIVERY
     slippage_bps: float = 5.0
     min_momentum: float = 0.0
+    weighting: str = "equal"  # "equal" or "inverse_vol" (risk parity)
+    vol_lookback: int = 20
     costs: CostConfig = field(default_factory=CostConfig)
 
 
@@ -172,15 +175,32 @@ def _rebalance(
         return
 
     portfolio_value = book.cash + book.market_value(last_price)
-    target_value = portfolio_value / len(targets)
+    weights = _target_weights(targets, history, cfg)
     for token in targets:
         price = prices[token]
+        target_value = portfolio_value * weights[token]
         desired = int(target_value // (price * (1 + cfg.slippage_bps / 10_000.0)))
         current = book.holdings[token].quantity if token in book.holdings else 0
         if desired > current:
             book.buy(token, desired - current, price, when)
         elif desired < current:
             book.sell(token, current - desired, price, when, "rebalance")
+
+
+def _target_weights(
+    targets: list[int], history: dict[int, list[float]], cfg: RotationConfig
+) -> dict[int, float]:
+    """Capital weights per target: equal, or inverse-vol (risk parity)."""
+    if cfg.weighting == "inverse_vol":
+        vols = {
+            t: max(return_volatility(history.get(t, []), cfg.vol_lookback), 1e-9) for t in targets
+        }
+        weights = inverse_vol_weights(vols)
+        if len(weights) == len(targets):
+            return weights
+    # Fall back to equal weighting.
+    equal = 1.0 / len(targets)
+    return {t: equal for t in targets}
 
 
 def _liquidate(book: _Book, panel: Panel, last_price: Mapping[int, float]) -> None:
