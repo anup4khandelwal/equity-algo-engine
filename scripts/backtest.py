@@ -66,6 +66,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--report", metavar="PATH", help="Write a self-contained HTML report to PATH."
     )
+    parser.add_argument(
+        "--realistic",
+        action="store_true",
+        help="NSE/BSE execution realism: next-open fills, ₹0.05 tick, participation cap.",
+    )
+    parser.add_argument(
+        "--circuit-pct",
+        type=float,
+        default=None,
+        help="Daily circuit/price band as a fraction (e.g. 0.10) when --realistic.",
+    )
+    parser.add_argument(
+        "--max-participation",
+        type=float,
+        default=None,
+        help="Cap fills to this fraction of bar volume when --realistic (e.g. 0.10).",
+    )
     return parser.parse_args(argv)
 
 
@@ -131,12 +148,24 @@ def main(argv: list[str] | None = None) -> int:
         opening_range_minutes=args.or_minutes,
         target_multiple=args.target_multiple,
     )
+    execution = None
+    if args.realistic:
+        from algotrading.backtest.execution_model import ExecutionModel
+
+        execution = ExecutionModel(
+            slippage_bps=args.slippage_bps,
+            circuit_pct=args.circuit_pct,
+            max_participation=args.max_participation,
+            fill_at="next_open",
+        )
+
     config = BacktestConfig(
         initial_capital=args.capital,
         product=Product(args.product),
         slippage_bps=args.slippage_bps,
         quantity=args.quantity,
         costs=CostConfig(),
+        execution=execution,
     )
 
     result = run(strategy, bars, config)

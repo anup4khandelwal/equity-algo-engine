@@ -1,6 +1,7 @@
 """Event-driven simulator, transaction-cost model, and metrics (Phase 3)."""
 
 from .costs import Charges, CostConfig, Product, charges_for_fill
+from .execution_model import ExecutionModel
 from .metrics import (
     BenchmarkStats,
     Metrics,
@@ -29,6 +30,7 @@ __all__ = [
     "BenchmarkStats",
     "Charges",
     "CostConfig",
+    "ExecutionModel",
     "Fold",
     "Metrics",
     "MonteCarloResult",
