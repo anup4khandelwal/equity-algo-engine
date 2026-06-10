@@ -15,6 +15,8 @@ digraph classes {
   RSI2     [label="{RSI2|period, lower, upper, trend_filter\l}"];
   VWAP     [label="{VWAPReversion|band, allow_short\l}"];
   ST       [label="{Supertrend|period, multiplier\l}"];
+  Ensemble [fillcolor="#e7e0fb", label="{EnsembleStrategy|members : [Member], detector,\lentry_threshold, exit_threshold\l|weighted vote, regime-gated\l}"];
+  MLStrat  [fillcolor="#ede7fc", label="{MLStrategy|scorer : Scorer, extractor,\lentry_threshold, exit_threshold\l|trades off P(up-move)\l}"];
 
   ORB -> Strategy [arrowhead=onormal];
   Momentum -> Strategy [arrowhead=onormal];
@@ -22,6 +24,19 @@ digraph classes {
   RSI2 -> Strategy [arrowhead=onormal];
   VWAP -> Strategy [arrowhead=onormal];
   ST -> Strategy [arrowhead=onormal];
+  Ensemble -> Strategy [arrowhead=onormal];
+  MLStrat -> Strategy [arrowhead=onormal];
+
+  /* ---------------- ML signal layer ---------------- */
+  Scorer   [fillcolor="#fffaf0", label="{«protocol» Scorer|+ predict_proba_one(features) : float\l}"];
+  LogReg   [fillcolor="#ede7fc", label="{LogisticRegression|weights, bias, learning_rate, l2, seed\l|+ fit(x, y)  + predict_proba(x)\l+ predict_proba_one(features) : float\l+ to_dict() / from_dict()\l}"];
+  Features [fillcolor="#ede7fc", label="{FeatureExtractor|rsi/adx/vol/sma periods\l|+ update(bar) : dict?  (warm-up aware)\l+ vector(features) : [float]\l}"];
+
+  LogReg -> Scorer [arrowhead=onormal, style=dashed, label="implements"];
+  MLStrat -> Scorer [style=dashed, arrowhead=vee, label="asks P(up)"];
+  MLStrat -> Features [style=dashed, arrowhead=vee, label="per-bar vector"];
+  Ensemble -> Regime [style=dashed, arrowhead=vee, label="gates members"];
+  Regime   [fillcolor="#eef0f3", label="{RegimeDetector|adx_period, adx_threshold\l|+ update(bar) : Regime  (Wilder ADX)\l}"];
 
   XS [shape=note, fillcolor="#f7f5fe", color="#6b46c1",
       label="cross_sectional (module, not a Strategy)\lmomentum_scores() · select_top()\l→ used by the rotation backtester\l"];

@@ -40,7 +40,8 @@ uv run pre-commit install   # wire gitleaks + ruff hooks (once)
 uv run python scripts/dashboard.py --demo   # serves API on http://127.0.0.1:8000
 ```
 Open `http://127.0.0.1:8000/pnl` (and `/positions /trades /equity /attribution
-/strategy-pnl /closed-trades /health`). For the full UI, see [§8](#8-web-dashboard-nextjs).
+/candles /regimes /strategy-pnl /closed-trades /health`). For the full UI, see
+[§8](#8-web-dashboard-nextjs).
 
 ---
 

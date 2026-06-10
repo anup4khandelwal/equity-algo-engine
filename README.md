@@ -41,6 +41,32 @@ All phases from the brief are implemented:
 
 Live order execution remains **stubbed** (`LiveGateway` raises `NotImplementedError`).
 
+### India-focused pro upgrades
+
+On top of the phased build, five upgrades push the engine toward a serious
+NSE/BSE setup:
+
+1. **NSE/BSE execution realism** — an optional `ExecutionModel` for the simulator:
+   next-open fills, ₹0.05 tick rounding, circuit-band clamping, and volume-
+   participation caps, so backtests don't assume free, instant, unlimited fills.
+2. **Volatility-target & risk-parity sizing** — `volatility_target_size` sizes a
+   position to a target P&L vol; `risk_parity_sizes` (inverse-vol, with a
+   water-filling weight cap) balances a multi-stock book so a smallcap and a
+   largecap contribute comparable risk.
+3. **Async live order manager + reconciliation** — `OrderManager` tracks the full
+   order lifecycle (partial fills backed out via VWAP, dedup guard); `reconcile()`
+   diffs internal vs. broker positions.
+4. **Pro dashboard** — candlesticks with trade markers, a regime badge, and
+   per-strategy realised P&L in the Next.js UI.
+5. **Feature/ML signal layer** — a streaming `FeatureExtractor` (8 India-relevant
+   features per bar), a from-scratch NumPy `LogisticRegression` + `StandardScaler`,
+   a forward-return `build_dataset` labeller, and an `MLStrategy` that trades off
+   the learned probability. NumPy-only, no scikit-learn; this is infrastructure
+   for *finding* edge — a real model needs your own NSE/BSE history.
+
+Plus a `RegimeDetector` (Wilder ADX) and an `EnsembleStrategy` that gates member
+strategies by market regime and takes a weighted vote.
+
 ### Backtest a strategy
 
 ```bash
@@ -55,10 +81,31 @@ uv run python scripts/rotation_backtest.py --exchange NSE \
 ```
 
 Strategies: `OpeningRangeBreakout` and `VWAPReversion` (intraday); `Momentum`,
-`MovingAverageCrossover`, `RSI2`, and `Supertrend` (positional/trend); plus a
-cross-sectional momentum **rotation** backtester (`backtest.run_rotation`) that
-ranks a universe and holds the top names. Optimise parameters out-of-sample with
-`backtest.walk_forward` (`scripts/optimize.py`).
+`MovingAverageCrossover`, `RSI2`, and `Supertrend` (positional/trend); the
+regime-aware `EnsembleStrategy` (weighted vote of members, gated by `RegimeDetector`);
+and the learned `MLStrategy`. Plus a cross-sectional momentum **rotation**
+backtester (`backtest.run_rotation`) that ranks a universe and holds the top names.
+Optimise parameters out-of-sample with `backtest.walk_forward` (`scripts/optimize.py`).
+
+For realistic fills, pass an `ExecutionModel` to the simulator (next-open fills,
+tick rounding, circuit bands, volume caps); without one it stays byte-for-byte
+compatible with the original fill-at-close path.
+
+### Train an ML signal
+
+The ML layer is dependency-free (NumPy only) and deterministic:
+
+```python
+from algotrading.ml import build_dataset, LogisticRegression, StandardScaler
+from algotrading.strategies import MLStrategy
+
+ds = build_dataset(bars, horizon=5, threshold=0.0)   # forward-return labels
+scaler = StandardScaler().fit(ds.x)
+model = LogisticRegression(n_iter=500, seed=0).fit(scaler.transform(ds.x), ds.y)
+
+# Wrap the scaler+model in a Scorer and trade off P(up-move):
+strategy = MLStrategy(instrument_token, scorer)       # plugs into the ensemble too
+```
 
 ### Serve the read-only dashboard
 
@@ -69,13 +116,16 @@ uv run python scripts/dashboard.py --demo
 uv run python scripts/dashboard.py --symbol INFY --from 2026-01-01 --to 2026-03-31
 ```
 
-Endpoints: `GET /positions /pnl /trades /equity /attribution /health`. Build a
-state programmatically with `DashboardState.from_engine(engine)`.
+Endpoints: `GET /positions /pnl /trades /equity /attribution /candles /regimes
+/strategy-pnl /closed-trades /health`. Build a state programmatically with
+`DashboardState.from_engine(engine)`.
 
 ### Web UI (Next.js)
 
-A proper dashboard UI lives in [`frontend/`](./frontend) — cards, an equity
-chart, and live-polling tables over the API above.
+A proper dashboard UI lives in [`frontend/`](./frontend) — summary cards, a
+candlestick chart with trade markers and a regime badge, an equity curve, and
+live-polling tables for per-strategy P&L, closed trades, open positions, and
+recent fills over the API above.
 
 ```bash
 # 1. backend
@@ -137,12 +187,18 @@ calls are mocked — **no live API access in CI**.
 ├── src/algotrading/
 │   ├── broker/             # Kite wrapper, token refresh, throttle   (Phase 1)
 │   ├── data/               # ingestion, backfill, DB models          (Phase 2)
-│   ├── strategies/         # Strategy base class + implementations   (Phase 3)
-│   ├── backtest/           # event-driven simulator + cost model     (Phase 3)
-│   ├── execution/          # OrderGateway, PaperGateway, LiveGateway  (Phase 4)
-│   ├── risk/               # sizing, stop-loss, kill-switch           (Phase 4)
+│   ├── strategies/         # Strategy base + impls, regime, ensemble,
+│   │                       #   features.py, ml_strategy.py           (Phase 3+)
+│   ├── ml/                 # NumPy logistic scorer, scaler, dataset
+│   ├── backtest/           # simulator + execution model + cost model (Phase 3)
+│   ├── execution/          # OrderGateway, Paper/LiveGateway,
+│   │                       #   order_manager.py, reconcile.py        (Phase 4)
+│   ├── risk/               # ATR / vol-target / risk-parity sizing,
+│   │                       #   stop-loss, kill-switch                (Phase 4)
+│   ├── api/                # read-only FastAPI dashboard service
 │   └── engine.py           # orchestrator (paper/live wiring)
-├── scripts/                # refresh_token.py, backfill.py
+├── frontend/               # Next.js dashboard UI
+├── scripts/                # refresh_token.py, backfill.py, dashboard.py, ...
 ├── migrations/             # alembic versions
 └── tests/
 ```

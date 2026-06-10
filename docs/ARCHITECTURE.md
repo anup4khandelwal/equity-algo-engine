@@ -41,14 +41,17 @@ flowchart TB
   end
 
   subgraph CORE["Strategies & risk"]
-    STRAT["Strategy ABC + ORB, Momentum,<br/>MA-cross, RSI2, VWAP, Supertrend,<br/>cross-sectional"]
-    RISK["RiskManager + ATR sizing<br/>kill-switch · square-off · max positions"]
+    STRAT["Strategy ABC + ORB, Momentum,<br/>MA-cross, RSI2, VWAP, Supertrend,<br/>cross-sectional · Ensemble (regime-gated)"]
+    ML["ML signal layer<br/>FeatureExtractor → LogisticRegression<br/>→ MLStrategy (Scorer)"]
+    REG["RegimeDetector (Wilder ADX)"]
+    RISK["RiskManager + sizing<br/>ATR · vol-target · risk-parity<br/>kill-switch · square-off · max positions"]
   end
 
   subgraph EXEC["Execution"]
     GW["OrderGateway (interface)"]
     PAPER["PaperGateway<br/>simulated fills + costs"]
     LIVE["LiveGateway<br/>NotImplementedError (disabled)"]
+    OMGR["OrderManager + reconcile<br/>lifecycle · partial fills · dedup"]
     PORT["Portfolio<br/>positions + net realised P&L"]
   end
 
@@ -62,6 +65,7 @@ flowchart TB
 
   subgraph RESEARCH["Backtesting & research (backtest/)"]
     SIM["Event-driven simulator"]
+    XMODEL["ExecutionModel (optional)<br/>next-open · tick · circuit · volume cap"]
     COST["Cost model"]
     MET["Metrics<br/>net P&L · Sharpe · Sortino · DD · turnover"]
     OPT["Walk-forward optimizer"]
@@ -84,10 +88,13 @@ flowchart TB
 
   WS --> FEED --> BB --> ENG
   ENG -->|on_bar → Signal| STRAT
+  STRAT -. regime gate .-> REG
+  STRAT -. learned score .-> ML
   ENG -->|gate + size| RISK
   ENG --> GW
   GW -->|market| PAPER --> PORT
   GW -. live mode off .-> LIVE
+  GW -. lifecycle / reconcile .-> OMGR
   ENG --> PORT
   ENG --> TLOG
   ENG --> NOTIF
@@ -96,6 +103,7 @@ flowchart TB
 
   TSDB -->|bars| SIM
   SIM --> STRAT
+  SIM -. optional fills .-> XMODEL
   SIM --> COST --> MET
   OPT --> SIM
   ROT --> COST
@@ -291,6 +299,33 @@ classDiagram
   Strategy <|-- RSI2
   Strategy <|-- VWAPReversion
   Strategy <|-- Supertrend
+  Strategy <|-- EnsembleStrategy
+  Strategy <|-- MLStrategy
+
+  class EnsembleStrategy {
+    +list~Member~ members
+    +RegimeDetector detector
+    +entry_threshold
+  }
+  class MLStrategy {
+    +Scorer scorer
+    +FeatureExtractor extractor
+    +entry_threshold
+    +exit_threshold
+  }
+  class Scorer {
+    <<protocol>>
+    +predict_proba_one(features) float
+  }
+  class LogisticRegression {
+    +fit(x, y)
+    +predict_proba_one(features) float
+    +to_dict() / from_dict()
+  }
+  MLStrategy ..> Scorer : asks P(up)
+  LogisticRegression ..|> Scorer
+  MLStrategy ..> FeatureExtractor : per-bar vector
+  EnsembleStrategy ..> RegimeDetector : gates members
 
   class OrderGateway {
     <<abstract>>
@@ -325,10 +360,11 @@ classDiagram
 | Config | `config/` | Typed settings from `.env` (secrets never hardcoded) |
 | Broker | `broker/` | Kite REST wrapper, token-bucket throttle, daily token refresh |
 | Data | `data/` | TimescaleDB models, repositories, backfill, calendar, corp-actions |
-| Strategies | `strategies/` | `Strategy` ABC + implementations; pure decision logic |
-| Backtest | `backtest/` | Simulator, cost model, metrics, rotation, walk-forward |
-| Risk | `risk/` | ATR sizing, daily-loss kill-switch, square-off, max positions |
-| Execution | `execution/` | `OrderGateway` → `PaperGateway` / `LiveGateway` (stub), `Portfolio` |
+| Strategies | `strategies/` | `Strategy` ABC + implementations, `RegimeDetector`, `EnsembleStrategy`, `FeatureExtractor`, `MLStrategy` |
+| ML | `ml/` | NumPy `LogisticRegression` + `StandardScaler`, forward-return `build_dataset` (no scikit-learn) |
+| Backtest | `backtest/` | Simulator, optional `ExecutionModel` (next-open/tick/circuit/volume), cost model, metrics, rotation, walk-forward |
+| Risk | `risk/` | ATR / vol-target / risk-parity sizing, daily-loss kill-switch, square-off, max positions |
+| Execution | `execution/` | `OrderGateway` → `PaperGateway` / `LiveGateway` (stub), `OrderManager` + `reconcile`, `Portfolio` |
 | Live | `live/` | Tick→bar aggregation, notifier, trade log, KiteTicker feed |
 | Engine | `engine.py` | `PaperTradingEngine`, `MultiStrategyEngine` (shared risk budget) |
 | API | `api/` | Read-only FastAPI dashboard service + app |

@@ -45,8 +45,10 @@ digraph equity_algo_engine {
   subgraph cluster_core {
     label="Strategies & Risk";
     style="rounded,filled"; color="#6b46c1"; fillcolor="#f7f5fe";
-    strategies [label="Strategy ABC + ORB, Momentum,\nMA-cross, RSI2, VWAP, Supertrend,\ncross-sectional", fillcolor="#e7e0fb"];
-    risk       [label="RiskManager + ATR sizing\nrisk/  (kill-switch, square-off,\nmax positions)"];
+    strategies [label="Strategy ABC + ORB, Momentum,\nMA-cross, RSI2, VWAP, Supertrend,\ncross-sectional · Ensemble (regime-gated)", fillcolor="#e7e0fb"];
+    mllayer    [label="ML signal layer\nFeatureExtractor → LogisticRegression\n→ MLStrategy (Scorer)", fillcolor="#ede7fc"];
+    regime     [label="RegimeDetector\n(Wilder ADX)"];
+    risk       [label="RiskManager + sizing\nrisk/  (ATR · vol-target · risk-parity,\nkill-switch, square-off, max positions)"];
   }
 
   /* ---------- Execution ---------- */
@@ -56,6 +58,7 @@ digraph equity_algo_engine {
     gateway   [label="OrderGateway (interface)"];
     paper     [label="PaperGateway\nsimulated fills + costs", fillcolor="#d9f2e3"];
     live      [label="LiveGateway\nNotImplementedError (disabled)", style="rounded,filled,dashed", fillcolor="#fde2df", color="#b0392f", fontcolor="#b0392f"];
+    ordermgr  [label="OrderManager + reconcile\nlifecycle · partial fills · dedup"];
     portfolio [label="Portfolio\npositions + net realised P&L"];
   }
 
@@ -64,6 +67,7 @@ digraph equity_algo_engine {
     label="Backtesting & research (backtest/)";
     style="rounded,filled"; color="#2c7a7b"; fillcolor="#f0fbfb";
     simulator [label="Event-driven simulator", fillcolor="#cdeeee"];
+    execmodel [label="ExecutionModel (optional)\nnext-open · tick · circuit · volume cap"];
     costs     [label="Cost model\nbrokerage·STT·exch·SEBI·GST·stamp"];
     metrics   [label="Metrics\nnet P&L·Sharpe·Sortino·DD·turnover"];
     rotation  [label="Rotation backtester\n(cross-sectional)"];
@@ -104,10 +108,13 @@ digraph equity_algo_engine {
   kite_ws -> feed [label="ticks"];
   feed -> barbuilder -> engine [label="bars"];
   engine -> strategies [label="on_bar → Signal"];
+  strategies -> regime [style=dotted, label="regime gate"];
+  strategies -> mllayer [style=dotted, label="learned score"];
   engine -> risk [label="gate + size"];
   engine -> gateway;
   gateway -> paper [label="market mode"];
   gateway -> live [style=dashed, color="#b0392f", label="live mode (off)"];
+  gateway -> ordermgr [style=dotted, label="lifecycle / reconcile"];
   paper -> portfolio [label="fills (net of costs)"];
   engine -> portfolio;
   engine -> tradelog;
@@ -118,6 +125,7 @@ digraph equity_algo_engine {
   /* ---------- Edges: research ---------- */
   tsdb -> simulator [label="bars"];
   simulator -> strategies [label="on_bar"];
+  simulator -> execmodel [style=dotted, label="optional fills"];
   simulator -> costs -> metrics;
   optimize -> simulator [label="grid / walk-forward"];
   rotation -> costs [style=dotted];
